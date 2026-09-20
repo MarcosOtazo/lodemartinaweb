@@ -67,7 +67,7 @@ export default function Footer() {
           <div>
             <h4 className="font-semibold mb-3">Seguinos</h4>
             <div className="space-y-2">
-              {config.facebook_url.trim() && (
+              {(config.facebook_url || '').trim() && (
                 <a
                   href={config.facebook_url.trim()}
                   target="_blank"
@@ -78,7 +78,7 @@ export default function Footer() {
                   <span className="text-sm font-medium">Facebook</span>
                 </a>
               )}
-              {config.instagram_url.trim() && (
+              {(config.instagram_url || '').trim() && (
                 <a
                   href={config.instagram_url.trim()}
                   target="_blank"
@@ -89,7 +89,7 @@ export default function Footer() {
                   <span className="text-sm font-medium">Instagram</span>
                 </a>
               )}
-              {!config.facebook_url.trim() && !config.instagram_url.trim() && (
+              {!(config.facebook_url || '').trim() && !(config.instagram_url || '').trim() && (
                 <p className="text-gray-400 text-sm">Próximamente</p>
               )}
             </div>

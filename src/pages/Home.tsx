@@ -145,7 +145,7 @@ export default function Home() {
       )}
 
       {/* Sobre nosotros */}
-      {config.about_text.trim() && (
+      {(config.about_text || '').trim() && (
         <div className="mt-8 card p-6">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">Sobre nosotros</h2>
           <p className="text-gray-600 whitespace-pre-line leading-relaxed">{config.about_text}</p>

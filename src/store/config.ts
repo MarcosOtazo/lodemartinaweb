@@ -45,6 +45,13 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
         config: {
           ...get().config,
           ...data,
+          whatsapp_number: data.whatsapp_number || '',
+          address: data.address || '',
+          facebook_url: data.facebook_url || '',
+          instagram_url: data.instagram_url || '',
+          hero_image_url: data.hero_image_url ?? null,
+          about_text: data.about_text || '',
+          footer_pattern_url: data.footer_pattern_url ?? null,
           opening_hours:
             storedHours && Object.keys(storedHours).length > 0
               ? storedHours
