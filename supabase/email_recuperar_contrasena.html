@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Recuperá tu contraseña</title>
+</head>
+<body style="margin:0;padding:0;background-color:#fff6ee;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fff6ee;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #f3e3d3;">
+          <tr>
+            <td align="center" style="background-color:#e63946;padding:28px 20px;">
+              <div style="font-size:36px;line-height:1;">🍔</div>
+              <div style="color:#ffffff;font-size:24px;font-weight:bold;margin-top:8px;">Lo de Martina</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 28px;">
+              <p style="font-size:20px;font-weight:bold;color:#1f2937;margin:0 0 12px;">Recuperá tu contraseña 🔑</p>
+              <p style="font-size:15px;color:#4b5563;line-height:1.6;margin:0 0 24px;">
+                Recibimos un pedido para restablecer la contraseña de tu cuenta en
+                <strong>Lo de Martina</strong>. Hacé clic en el botón para elegir una nueva.
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .ConfirmationURL }}" style="display:inline-block;background-color:#e63946;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 32px;border-radius:10px;">
+                      Cambiar mi contraseña
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="font-size:13px;color:#9ca3af;line-height:1.6;margin:24px 0 0;">
+                Si el botón no funciona, copiá y pegá este link en tu navegador:<br />
+                <a href="{{ .ConfirmationURL }}" style="color:#e63946;word-break:break-all;">{{ .ConfirmationURL }}</a>
+              </p>
+              <p style="font-size:13px;color:#9ca3af;margin:16px 0 0;">
+                Si no pediste cambiar tu contraseña, podés ignorar este correo y tu clave actual va a seguir funcionando.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="background-color:#1f2937;padding:20px;color:#9ca3af;font-size:12px;line-height:1.6;">
+              Lo de Martina · San Martín 1311, Paso de los Libres, Corrientes
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

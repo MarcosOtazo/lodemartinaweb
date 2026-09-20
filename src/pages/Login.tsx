@@ -132,6 +132,14 @@ export default function Login() {
             <button type="submit" className="btn-primary w-full" disabled={loading}>
               {loading ? 'Procesando...' : mode === 'login' ? 'Ingresar' : 'Crear cuenta'}
             </button>
+            {mode === 'login' && (
+              <Link
+                to="/recuperar"
+                className="block text-center text-sm text-gray-500 hover:text-primary transition-colors"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            )}
           </form>
         </div>
 

@@ -9,6 +9,7 @@ import Footer from './components/Footer';
 import Home from './pages/Home';
 import Menu from './pages/Menu';
 import Login from './pages/Login';
+import ResetPassword from './pages/ResetPassword';
 import Checkout from './pages/Checkout';
 import MyOrders from './pages/MyOrders';
 import AdminLayout from './pages/admin/AdminLayout';
@@ -145,6 +146,14 @@ export default function App() {
           element={
             <PublicLayout>
               <Login />
+            </PublicLayout>
+          }
+        />
+        <Route
+          path="/recuperar"
+          element={
+            <PublicLayout>
+              <ResetPassword />
             </PublicLayout>
           }
         />

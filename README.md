@@ -35,7 +35,18 @@ y llegan al WhatsApp del negocio. Incluye panel de administración.
    ```
 3. Listo: al iniciar sesión vas a ver "Panel Admin" en el menú.
 
-### 3. Netlify
+### 3. Emails de registro y recuperación de contraseña
+
+1. En Supabase: **Authentication → URL Configuration**:
+   - **Site URL**: `https://lodemartinaweb.netlify.app` (o tu dominio)
+   - **Redirect URLs**: agregar `https://lodemartinaweb.netlify.app` y `http://localhost:5173`
+2. **Authentication → Email Templates**:
+   - **Confirm signup**: pegar el contenido de `supabase/email_confirmar_cuenta.html`
+     (asunto: "Confirmá tu cuenta — Lo de Martina 🍔")
+   - **Reset password**: pegar el contenido de `supabase/email_recuperar_contrasena.html`
+     (asunto: "Recuperá tu contraseña — Lo de Martina 🔑")
+
+### 4. Netlify
 
 1. Subir el repo a GitHub.
 2. En [netlify.com](https://netlify.com): **Add new site → Import from Git**.
@@ -53,16 +64,20 @@ npm run dev
 
 **Clientes**
 - Ver menú por categorías (hamburguesas, tostadas, combos, bebidas)
-- Carrito con notas por producto
-- Checkout: retiro/envío, forma de pago, envía el pedido a WhatsApp del negocio
-- Registro/login y historial de pedidos con estado en tiempo real
+- Carrito con notas por producto y variantes/opcionales con precio
+- Checkout: retiro/envío, efectivo con vuelto o transferencia con datos bancarios,
+  envía el pedido a WhatsApp del negocio
+- Registro/login (con confirmación por email), recuperación de contraseña
+  y historial de pedidos con estado en tiempo real
 
 **Admin** (Panel Admin)
-- Dashboard: ventas de hoy, pendientes, totales, ticket promedio
-- Productos: crear/editar/eliminar con fotos (Supabase Storage)
-- Ventas: historial completo, filtros por estado, cambiar estado de cada pedido,
-  contactar al cliente por WhatsApp
-- Configuración: logo, colores, títulos, número de WhatsApp, costo de envío,
-  pedido mínimo, abrir/cerrar el local
+- Dashboard: ventas de hoy y de la semana, gráfico de 7 días, productos más vendidos
+- Productos: crear/editar/eliminar con fotos, opciones y variantes con precio extra
+- Ventas: filtros por fecha/estado, exportar CSV, imprimir comanda, marcar entregados
+  en lote, sonido cuando entra un pedido nuevo
+- Clientes: listado de usuarios registrados con pedidos y total gastado
+- Configuración: logo, colores, horarios por día, redes sociales, imagen principal,
+  textos, costo de envío, pedido mínimo
 
-**Tiempo real**: los pedidos nuevos aparecen al instante en el panel del admin.
+**Tiempo real**: los pedidos nuevos aparecen al instante en el panel del admin
+con aviso sonoro.
