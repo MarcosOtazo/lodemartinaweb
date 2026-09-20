@@ -8,6 +8,7 @@
 drop trigger if exists on_auth_user_created on auth.users;
 drop function if exists public.handle_new_user();
 drop function if exists public.make_admin(text);
+drop function if exists public.is_admin();
 drop policy if exists "Los usuarios pueden ver su propio perfil" on public.profiles;
 drop policy if exists "Los usuarios pueden actualizar su propio perfil" on public.profiles;
 drop policy if exists "Los usuarios pueden crear su propio perfil" on public.profiles;
@@ -63,6 +64,20 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
+-- Funcion para chequear si el usuario actual es admin (sin recursion de politicas)
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
 -- ---------- PRODUCTS ----------
 create table public.products (
   id uuid primary key default gen_random_uuid(),
@@ -83,19 +98,13 @@ create policy "Todos pueden ver productos activos"
   on public.products for select using (true);
 
 create policy "Solo admin puede crear productos"
-  on public.products for insert with check (exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
-  ));
+  on public.products for insert with check (public.is_admin());
 
 create policy "Solo admin puede actualizar productos"
-  on public.products for update using (exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
-  ));
+  on public.products for update using (public.is_admin());
 
 create policy "Solo admin puede eliminar productos"
-  on public.products for delete using (exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
-  ));
+  on public.products for delete using (public.is_admin());
 
 -- ---------- ORDERS ----------
 create table public.orders (
@@ -118,22 +127,16 @@ create table public.orders (
 alter table public.orders enable row level security;
 
 create policy "Los usuarios pueden ver sus propios pedidos"
-  on public.orders for select using (auth.uid() = user_id or exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
-  ));
+  on public.orders for select using (auth.uid() = user_id or public.is_admin());
 
 create policy "Los usuarios autenticados pueden crear pedidos"
   on public.orders for insert with check (auth.uid() = user_id);
 
 create policy "Solo admin puede actualizar pedidos"
-  on public.orders for update using (exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
-  ));
+  on public.orders for update using (public.is_admin());
 
 create policy "Solo admin puede eliminar pedidos"
-  on public.orders for delete using (exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
-  ));
+  on public.orders for delete using (public.is_admin());
 
 -- ---------- SITE CONFIG ----------
 create table public.site_config (
@@ -159,14 +162,10 @@ create policy "Todos pueden ver la configuracion"
   on public.site_config for select using (true);
 
 create policy "Solo admin puede actualizar la configuracion"
-  on public.site_config for update using (exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
-  ));
+  on public.site_config for update using (public.is_admin());
 
 create policy "Solo admin puede crear la configuracion"
-  on public.site_config for insert with check (exists (
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
-  ));
+  on public.site_config for insert with check (public.is_admin());
 
 -- Configuracion inicial
 insert into public.site_config (id) values (1) on conflict do nothing;
@@ -186,23 +185,17 @@ create policy "Todos pueden ver imagenes de productos"
 
 create policy "Solo admin puede subir imagenes"
   on storage.objects for insert with check (
-    bucket_id = 'product-images' and exists (
-      select 1 from public.profiles where id = auth.uid() and role = 'admin'
-    )
+    bucket_id = 'product-images' and public.is_admin()
   );
 
 create policy "Solo admin puede actualizar imagenes"
   on storage.objects for update using (
-    bucket_id = 'product-images' and exists (
-      select 1 from public.profiles where id = auth.uid() and role = 'admin'
-    )
+    bucket_id = 'product-images' and public.is_admin()
   );
 
 create policy "Solo admin puede eliminar imagenes"
   on storage.objects for delete using (
-    bucket_id = 'product-images' and exists (
-      select 1 from public.profiles where id = auth.uid() and role = 'admin'
-    )
+    bucket_id = 'product-images' and public.is_admin()
   );
 
 -- ---------- FUNCION PARA HACER ADMIN A UN USUARIO ----------
