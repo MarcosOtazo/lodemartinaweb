@@ -5,6 +5,7 @@ import {
   ShoppingBag,
   Receipt,
   Settings,
+  Users,
   Menu as MenuIcon,
   X,
   ArrowLeft,
@@ -16,6 +17,7 @@ const navItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/productos', label: 'Productos', icon: ShoppingBag },
   { to: '/admin/ventas', label: 'Ventas', icon: Receipt },
+  { to: '/admin/clientes', label: 'Clientes', icon: Users },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ];
 

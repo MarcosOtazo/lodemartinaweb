@@ -3,14 +3,17 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import type { Order, OrderItem, OrderStatus } from '../../types';
 import {
+  exportOrdersCSV,
   formatDate,
   formatPrice,
   ORDER_STATUS_COLORS,
   ORDER_STATUS_LABELS,
   PAYMENT_METHODS,
+  playNotificationSound,
+  printOrderTicket,
   cn,
 } from '../../lib/utils';
-import { Search, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, MessageCircle, Download, Printer, CheckSquare } from 'lucide-react';
 
 const ALL_STATUSES: (OrderStatus | 'all')[] = ['all', 'pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
 
@@ -19,7 +22,10 @@ export default function AdminSales() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
   const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const loadOrders = async () => {
     const { data } = await supabase
@@ -36,7 +42,12 @@ export default function AdminSales() {
 
     const channel = supabase
       .channel('admin-sales')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => {
+        playNotificationSound();
+        toast('🛎️ ¡Nuevo pedido!', { icon: '🔔' });
+        loadOrders();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
         loadOrders();
       })
       .subscribe();
@@ -59,13 +70,42 @@ export default function AdminSales() {
     loadOrders();
   };
 
+  const markSelectedDelivered = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`¿Marcar ${selected.size} pedido(s) como entregado(s)?`)) return;
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'delivered', updated_at: new Date().toISOString() })
+      .in('id', [...selected]);
+    if (error) {
+      toast.error('Error al actualizar los pedidos');
+      return;
+    }
+    toast.success(`${selected.size} pedido(s) marcado(s) como entregado(s)`);
+    setSelected(new Set());
+    loadOrders();
+  };
+
+  const toggleSelect = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  };
+
+  const fromDate = dateFrom ? new Date(dateFrom + 'T00:00:00') : null;
+  const toDate = dateTo ? new Date(dateTo + 'T23:59:59') : null;
+
   const filtered = orders.filter((o) => {
     const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
     const matchesSearch =
       o.user_name.toLowerCase().includes(search.toLowerCase()) ||
       o.id.toLowerCase().includes(search.toLowerCase()) ||
       o.user_phone.includes(search);
-    return matchesStatus && matchesSearch;
+    const d = new Date(o.created_at);
+    const matchesFrom = !fromDate || d >= fromDate;
+    const matchesTo = !toDate || d <= toDate;
+    return matchesStatus && matchesSearch && matchesFrom && matchesTo;
   });
 
   const filteredRevenue = filtered
@@ -93,32 +133,62 @@ export default function AdminSales() {
         </div>
       </div>
 
-      <div className="flex gap-3 mb-6 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
+      {/* Filtros */}
+      <div className="flex gap-3 mb-4 flex-wrap items-center">
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             className="input pl-9"
-            placeholder="Buscar por nombre, teléfono o nº de pedido..."
+            placeholder="Buscar por nombre, teléfono o nº..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-1 overflow-x-auto">
-          {ALL_STATUSES.map((status) => (
-            <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={cn(
-                'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
-                statusFilter === status
-                  ? 'bg-secondary text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
-              )}
-            >
-              {status === 'all' ? 'Todos' : ORDER_STATUS_LABELS[status]}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            className="input w-auto"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            title="Desde"
+          />
+          <span className="text-gray-400 text-sm">a</span>
+          <input
+            type="date"
+            className="input w-auto"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            title="Hasta"
+          />
         </div>
+        <button onClick={() => exportOrdersCSV(filtered)} className="btn-secondary" title="Exportar CSV">
+          <Download className="h-4 w-4" /> Exportar
+        </button>
+        <button
+          onClick={markSelectedDelivered}
+          disabled={selected.size === 0}
+          className="btn-primary"
+          title="Marcar seleccionados como entregados"
+        >
+          <CheckSquare className="h-4 w-4" /> Entregados ({selected.size})
+        </button>
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto mb-6 pb-1">
+        {ALL_STATUSES.map((status) => (
+          <button
+            key={status}
+            onClick={() => setStatusFilter(status)}
+            className={cn(
+              'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
+              statusFilter === status
+                ? 'bg-secondary text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
+            )}
+          >
+            {status === 'all' ? 'Todos' : ORDER_STATUS_LABELS[status]}
+          </button>
+        ))}
       </div>
 
       {loading ? (
@@ -141,24 +211,44 @@ export default function AdminSales() {
             const isExpanded = expandedId === order.id;
             return (
               <div key={order.id} className="card">
-                <div
-                  className="p-5 cursor-pointer flex items-center justify-between flex-wrap gap-3"
-                  onClick={() => setExpandedId(isExpanded ? null : order.id)}
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <p className="font-bold">#{order.id.slice(0, 8).toUpperCase()}</p>
-                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold', ORDER_STATUS_COLORS[order.status])}>
-                        {ORDER_STATUS_LABELS[order.status]}
-                      </span>
+                <div className="p-5 flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : order.id)}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(order.id)}
+                      onChange={() => toggleSelect(order.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 accent-primary shrink-0"
+                      title="Seleccionar"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <p className="font-bold">#{order.id.slice(0, 8).toUpperCase()}</p>
+                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold', ORDER_STATUS_COLORS[order.status])}>
+                          {ORDER_STATUS_LABELS[order.status]}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {order.user_name} · {order.user_phone} · {formatDate(order.created_at)}
+                      </p>
                     </div>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {order.user_name} · {order.user_phone} · {formatDate(order.created_at)}
-                    </p>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
                     <p className="font-bold text-primary text-lg">{formatPrice(Number(order.total))}</p>
-                    {isExpanded ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
+                    <button
+                      onClick={() => printOrderTicket(order)}
+                      className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700"
+                      title="Imprimir comanda"
+                    >
+                      <Printer className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : order.id)}
+                      className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+                      title="Detalle"
+                    >
+                      {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                    </button>
                   </div>
                 </div>
 
@@ -229,14 +319,19 @@ export default function AdminSales() {
                             )
                           )}
                         </div>
-                        <a
-                          href={`https://wa.me/${order.user_phone.replace(/\D/g, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn-secondary mt-4 text-sm w-full"
-                        >
-                          <MessageCircle className="h-4 w-4" /> Contactar al cliente
-                        </a>
+                        <div className="flex gap-2 mt-4">
+                          <button onClick={() => printOrderTicket(order)} className="btn-secondary text-sm flex-1">
+                            <Printer className="h-4 w-4" /> Comanda
+                          </button>
+                          <a
+                            href={`https://wa.me/${order.user_phone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-secondary text-sm flex-1"
+                          >
+                            <MessageCircle className="h-4 w-4" /> Cliente
+                          </a>
+                        </div>
                       </div>
                     </div>
                   </div>

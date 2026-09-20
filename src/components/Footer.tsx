@@ -67,24 +67,31 @@ export default function Footer() {
           <div>
             <h4 className="font-semibold mb-3">Seguinos</h4>
             <div className="space-y-2">
-              <a
-                href="https://facebook.com/lodemartina.ok"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
-              >
-                <FacebookIcon />
-                <span className="text-sm font-medium">Facebook</span>
-              </a>
-              <a
-                href="https://instagram.com/lodemartina.ok"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
-              >
-                <InstagramIcon />
-                <span className="text-sm font-medium">Instagram</span>
-              </a>
+              {config.facebook_url.trim() && (
+                <a
+                  href={config.facebook_url.trim()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+                >
+                  <FacebookIcon />
+                  <span className="text-sm font-medium">Facebook</span>
+                </a>
+              )}
+              {config.instagram_url.trim() && (
+                <a
+                  href={config.instagram_url.trim()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+                >
+                  <InstagramIcon />
+                  <span className="text-sm font-medium">Instagram</span>
+                </a>
+              )}
+              {!config.facebook_url.trim() && !config.instagram_url.trim() && (
+                <p className="text-gray-400 text-sm">Próximamente</p>
+              )}
             </div>
           </div>
         </div>

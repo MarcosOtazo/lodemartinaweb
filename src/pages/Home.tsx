@@ -84,6 +84,17 @@ export default function Home() {
         <p className="text-gray-500 text-sm sm:text-base mt-1">{config.hero_subtitle}</p>
       </div>
 
+      {/* Imagen principal */}
+      {config.hero_image_url && (
+        <div className="mb-4 sm:mb-6">
+          <img
+            src={config.hero_image_url}
+            alt={config.site_name}
+            className="w-full h-40 sm:h-64 rounded-2xl object-cover shadow-sm"
+          />
+        </div>
+      )}
+
       {/* Categorías con imágenes (mobile-first) */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -130,6 +141,14 @@ export default function Home() {
               </span>
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* Sobre nosotros */}
+      {config.about_text.trim() && (
+        <div className="mt-8 card p-6">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">Sobre nosotros</h2>
+          <p className="text-gray-600 whitespace-pre-line leading-relaxed">{config.about_text}</p>
         </div>
       )}
 

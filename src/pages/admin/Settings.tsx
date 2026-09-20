@@ -9,6 +9,7 @@ export default function AdminSettings() {
   const { config, updateConfig } = useConfigStore();
   const [form, setForm] = useState<SiteConfig>(config);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [heroFile, setHeroFile] = useState<File | null>(null);
   const [footerFile, setFooterFile] = useState<File | null>(null);
   const [footerRemoved, setFooterRemoved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -66,6 +67,25 @@ export default function AdminSettings() {
         footerUrl = publicUrl.publicUrl;
       }
 
+      let heroUrl = form.hero_image_url;
+
+      if (heroFile) {
+        if (heroUrl) {
+          const oldPath = heroUrl.split('/').pop();
+          if (oldPath) await supabase.storage.from('product-images').remove([oldPath]);
+        }
+        const fileExt = heroFile.name.split('.').pop();
+        const fileName = `hero-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('product-images')
+          .upload(fileName, heroFile);
+        if (uploadError) throw uploadError;
+        const { data: publicUrl } = supabase.storage
+          .from('product-images')
+          .getPublicUrl(fileName);
+        heroUrl = publicUrl.publicUrl;
+      }
+
       const { error } = await updateConfig({
         site_name: form.site_name,
         logo_url: logoUrl,
@@ -75,6 +95,10 @@ export default function AdminSettings() {
         hero_subtitle: form.hero_subtitle,
         whatsapp_number: form.whatsapp_number,
         address: form.address,
+        facebook_url: form.facebook_url,
+        instagram_url: form.instagram_url,
+        hero_image_url: heroUrl,
+        about_text: form.about_text,
         footer_pattern_url: footerUrl,
         delivery_fee: Number(form.delivery_fee),
         min_order_amount: Number(form.min_order_amount),
@@ -84,6 +108,7 @@ export default function AdminSettings() {
       if (error) throw new Error(error);
       toast.success('Configuración guardada');
       setLogoFile(null);
+      setHeroFile(null);
       setFooterFile(null);
       setFooterRemoved(false);
     } catch (error) {
@@ -153,6 +178,75 @@ export default function AdminSettings() {
               />
             </div>
           </div>
+        </div>
+
+        {/* Texto e imagen principal */}
+        <div className="card p-6">
+          <h2 className="text-lg font-bold mb-4">Inicio: imagen y texto</h2>
+          <div className="space-y-4">
+            <div>
+              <label className={labelClass}>Imagen principal (debajo del título)</label>
+              <div className="flex items-center gap-4 flex-wrap">
+                {(heroFile || form.hero_image_url) && (
+                  <img
+                    src={heroFile ? URL.createObjectURL(heroFile) : form.hero_image_url!}
+                    alt="Imagen principal"
+                    className="h-20 w-full max-w-[200px] rounded-lg object-cover border border-gray-200"
+                  />
+                )}
+                <label className="btn-secondary cursor-pointer">
+                  {heroFile ? 'Cambiar imagen' : form.hero_image_url ? 'Cambiar imagen' : 'Subir imagen'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => setHeroFile(e.target.files?.[0] || null)}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Se muestra en el inicio, entre el título y las categorías.</p>
+            </div>
+            <div>
+              <label className={labelClass}>Sección "Sobre nosotros"</label>
+              <textarea
+                className={cn(inputClass, 'min-h-[100px] resize-y')}
+                value={form.about_text}
+                onChange={(e) => setForm({ ...form, about_text: e.target.value })}
+                placeholder="Contá la historia del negocio: cómo empezaron, qué los hace únicos..."
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Si está vacío, la sección no se muestra en el inicio.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Redes sociales */}
+        <div className="card p-6">
+          <h2 className="text-lg font-bold mb-4">Redes sociales</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Facebook</label>
+              <input
+                className={inputClass}
+                value={form.facebook_url}
+                onChange={(e) => setForm({ ...form, facebook_url: e.target.value })}
+                placeholder="https://facebook.com/lodemartina.ok"
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Instagram</label>
+              <input
+                className={inputClass}
+                value={form.instagram_url}
+                onChange={(e) => setForm({ ...form, instagram_url: e.target.value })}
+                placeholder="https://instagram.com/lodemartina.ok"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Si dejás un campo vacío, ese botón no se muestra en el footer.
+          </p>
         </div>
 
         {/* Fondo del footer */}

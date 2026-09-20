@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import type { CartItem, DaySchedule, OrderItem, ProductCategory } from '../types';
+import type { CartItem, DaySchedule, Order, OrderItem, ProductCategory } from '../types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -190,4 +190,127 @@ export function commonSchedule(hours: Record<string, DaySchedule>): string | nul
   if (working.length === 0) return null;
   const ranges = working.map((d) => `${d.open}-${d.close}`);
   return new Set(ranges).size === 1 ? `${working[0].open} a ${working[0].close} hs` : null;
+}
+
+export function playNotificationSound() {
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.setValueAtTime(660, now + 0.15);
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.45);
+  } catch {
+    /* sin audio disponible */
+  }
+}
+
+export function exportOrdersCSV(orders: Order[]) {
+  const header = [
+    'Nº pedido',
+    'Fecha',
+    'Cliente',
+    'Teléfono',
+    'Items',
+    'Subtotal',
+    'Envío',
+    'Total',
+    'Estado',
+    'Pago',
+    'Dirección',
+    'Notas',
+  ];
+  const rows = orders.map((o) => {
+    const items = (o.items as unknown as OrderItem[]) || [];
+    const itemsText = items
+      .map((it) => {
+        const opts = (it.selected_options || [])
+          .map((opt) => `${opt.item_name}${opt.price > 0 ? `(+${opt.price})` : ''}`)
+          .join(', ');
+        return `${it.quantity}x ${it.product_name}${opts ? ` [${opts}]` : ''}${it.notes ? ` (${it.notes})` : ''}`;
+      })
+      .join('; ');
+    return [
+      o.id.slice(0, 8).toUpperCase(),
+      formatDate(o.created_at),
+      o.user_name,
+      o.user_phone,
+      itemsText,
+      o.subtotal,
+      o.delivery_fee,
+      o.total,
+      ORDER_STATUS_LABELS[o.status] || o.status,
+      PAYMENT_METHODS[o.payment_method] || o.payment_method,
+      o.delivery_address || '',
+      o.notes || '',
+    ];
+  });
+  const csv = [header, ...rows]
+    .map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(','))
+    .join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pedidos-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function printOrderTicket(order: Order) {
+  const items = (order.items as unknown as OrderItem[]) || [];
+  const rows = items
+    .map(
+      (it) => `
+      <div class="item">
+        <div>
+          <strong>${it.quantity}x ${it.product_name}</strong>
+          ${(it.selected_options || [])
+            .map((opt) => `<div class="opt">· ${opt.item_name}${opt.price > 0 ? ` (+$${opt.price})` : ''}</div>`)
+            .join('')}
+          ${it.notes ? `<div class="opt">Nota: ${it.notes}</div>` : ''}
+        </div>
+        <span>$${Number(it.product_price * it.quantity).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
+      </div>`
+    )
+    .join('');
+
+  const w = window.open('', '_blank', 'width=360,height=640');
+  if (!w) return;
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Comanda ${order.id.slice(0, 8).toUpperCase()}</title>
+  <style>
+    body { font-family: 'Courier New', monospace; font-size: 13px; padding: 16px; color: #000; }
+    h1 { font-size: 16px; text-align: center; margin: 0 0 4px; }
+    .sub { text-align: center; font-size: 11px; margin-bottom: 12px; }
+    .item { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .opt { font-size: 11px; color: #444; }
+    hr { border: none; border-top: 1px dashed #000; margin: 10px 0; }
+    .total { font-size: 16px; font-weight: bold; display: flex; justify-content: space-between; }
+    .info { font-size: 12px; margin-top: 8px; }
+  </style></head><body>
+    <h1>${'Lo de Martina'}</h1>
+    <div class="sub">Comanda #${order.id.slice(0, 8).toUpperCase()}<br>${formatDate(order.created_at)}</div>
+    <hr>
+    ${rows}
+    <hr>
+    <div class="total"><span>TOTAL</span><span>$${Number(order.total).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span></div>
+    <div class="info">
+      Cliente: ${order.user_name}<br>
+      Tel: ${order.user_phone}<br>
+      Pago: ${PAYMENT_METHODS[order.payment_method] || order.payment_method}<br>
+      ${order.delivery_address ? `Dirección: ${order.delivery_address}<br>` : ''}
+      ${order.notes ? `Notas: ${order.notes}` : ''}
+    </div>
+  </body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 300);
 }

@@ -15,6 +15,7 @@ import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminProducts from './pages/admin/Products';
 import AdminSales from './pages/admin/Sales';
+import AdminUsers from './pages/admin/Users';
 import AdminSettings from './pages/admin/Settings';
 
 function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
@@ -92,6 +93,7 @@ export default function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="productos" element={<AdminProducts />} />
           <Route path="ventas" element={<AdminSales />} />
+          <Route path="clientes" element={<AdminUsers />} />
           <Route path="configuracion" element={<AdminSettings />} />
         </Route>
 

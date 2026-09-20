@@ -102,6 +102,10 @@ export interface SiteConfig {
   hero_subtitle: string;
   whatsapp_number: string;
   address: string;
+  facebook_url: string;
+  instagram_url: string;
+  hero_image_url: string | null;
+  about_text: string;
   footer_pattern_url: string | null;
   delivery_fee: number;
   min_order_amount: number;
