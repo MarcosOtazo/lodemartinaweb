@@ -28,6 +28,7 @@ export interface Product {
   image_url: string | null;
   is_active: boolean;
   sort_order: number;
+  receta_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -123,6 +124,33 @@ export interface CartItem {
   notes?: string;
   product: Product;
   selected_options: SelectedOption[];
+}
+
+export interface Insumo {
+  id: string;
+  name: string;
+  unit: string;
+  cost: number;
+  category: string;
+  quantity: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecipeIngredient {
+  id: string;
+  receta_id: string;
+  insumo_id: string;
+  quantity: number;
+  unit: string;
+  insumo?: Insumo;
+}
+
+export interface Receta {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AuthState {

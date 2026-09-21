@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
-import type { Order, OrderItem, OrderStatus } from '../../types';
+import { fetchCostData } from '../../lib/costs';
+import { useConfigStore } from '../../store/config';
+import type { Order, OrderItem, OrderStatus, Product } from '../../types';
+import type { Json } from '../../types/database';
 import {
+  commonSchedule,
+  computeIsOpen,
   exportOrdersCSV,
   formatDate,
   formatPrice,
@@ -13,19 +18,31 @@ import {
   printOrderTicket,
   cn,
 } from '../../lib/utils';
-import { Search, ChevronDown, ChevronUp, MessageCircle, Download, Printer, CheckSquare } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, MessageCircle, Download, Printer, CheckSquare, Plus, Trash2, X } from 'lucide-react';
 
 const ALL_STATUSES: (OrderStatus | 'all')[] = ['all', 'pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
 
 export default function AdminSales() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const config = useConfigStore((s) => s.config);
   const [loading, setLoading] = useState(true);
+  const [productCosts, setProductCosts] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [products, setProducts] = useState<Product[]>([]);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualPayment, setManualPayment] = useState<'cash' | 'transfer'>('cash');
+  const [manualNotes, setManualNotes] = useState('');
+  const [manualItems, setManualItems] = useState<
+    { product_id: string; product_name: string; product_price: number; quantity: number }[]
+  >([]);
+  const [manualSaving, setManualSaving] = useState(false);
 
   const loadOrders = async () => {
     const { data } = await supabase
@@ -39,6 +56,13 @@ export default function AdminSales() {
 
   useEffect(() => {
     loadOrders();
+    fetchCostData().then((d) => setProductCosts(d.productCosts));
+    supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => setProducts((data || []) as Product[]));
 
     const channel = supabase
       .channel('admin-sales')
@@ -56,6 +80,16 @@ export default function AdminSales() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const orderCost = (order: Order): number => {
+    const items = (order.items as unknown as OrderItem[]) || [];
+    return items.reduce(
+      (s, it) => s + (productCosts[it.product_id] || 0) * it.quantity,
+      0
+    );
+  };
+
+  const orderProfit = (order: Order): number => Number(order.total) - orderCost(order);
 
   const updateStatus = async (orderId: string, status: OrderStatus) => {
     const { error } = await supabase
@@ -93,6 +127,67 @@ export default function AdminSales() {
     setSelected(next);
   };
 
+  const deleteOrder = async (order: Order) => {
+    if (!confirm(`¿Eliminar el pedido #${order.id.slice(0, 8).toUpperCase()} de ${order.user_name}? Esta acción no se puede deshacer.`)) return;
+    const { error } = await supabase.from('orders').delete().eq('id', order.id);
+    if (error) {
+      toast.error('Error al eliminar el pedido');
+      return;
+    }
+    toast.success('Pedido eliminado');
+    loadOrders();
+  };
+
+  const openManualModal = () => {
+    setManualName('');
+    setManualPhone('');
+    setManualPayment('cash');
+    setManualNotes('');
+    setManualItems([{ product_id: '', product_name: '', product_price: 0, quantity: 1 }]);
+    setManualOpen(true);
+  };
+
+  const manualSubtotal = manualItems.reduce(
+    (s, it) => s + Number(it.product_price || 0) * Number(it.quantity || 0),
+    0
+  );
+
+  const saveManualOrder = async () => {
+    if (!manualName.trim()) {
+      toast.error('Ingresá el nombre del cliente');
+      return;
+    }
+    const validItems = manualItems.filter((it) => it.product_id && Number(it.quantity) > 0);
+    if (validItems.length === 0) {
+      toast.error('Agregá al menos un producto con cantidad');
+      return;
+    }
+    setManualSaving(true);
+    try {
+      const { error } = await supabase.from('orders').insert({
+        user_id: null,
+        user_name: manualName.trim(),
+        user_phone: manualPhone.trim() || '—',
+        items: validItems as unknown as Json,
+        subtotal: manualSubtotal,
+        delivery_fee: 0,
+        total: manualSubtotal,
+        status: 'confirmed',
+        payment_method: manualPayment,
+        notes: [manualNotes.trim(), 'Pedido cargado en local'].filter(Boolean).join(' | '),
+      });
+      if (error) throw error;
+      toast.success('Pedido cargado');
+      setManualOpen(false);
+      loadOrders();
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al cargar el pedido');
+    } finally {
+      setManualSaving(false);
+    }
+  };
+
   const fromDate = dateFrom ? new Date(dateFrom + 'T00:00:00') : null;
   const toDate = dateTo ? new Date(dateTo + 'T23:59:59') : null;
 
@@ -112,11 +207,15 @@ export default function AdminSales() {
     .filter((o) => o.status !== 'cancelled')
     .reduce((sum, o) => sum + Number(o.total), 0);
 
+  const filteredProfit = filtered
+    .filter((o) => o.status !== 'cancelled')
+    .reduce((sum, o) => sum + orderProfit(o), 0);
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Ventas y pedidos</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
         <div className="card p-6">
           <p className="text-sm text-gray-500">Pedidos (filtrados)</p>
           <p className="text-2xl font-extrabold">{filtered.length}</p>
@@ -124,6 +223,13 @@ export default function AdminSales() {
         <div className="card p-6">
           <p className="text-sm text-gray-500">Facturación (filtrada)</p>
           <p className="text-2xl font-extrabold text-primary">{formatPrice(filteredRevenue)}</p>
+        </div>
+        <div className="card p-6">
+          <p className="text-sm text-gray-500">Ganancia estimada</p>
+          <p className={cn('text-2xl font-extrabold', filteredProfit >= 0 ? 'text-green-600' : 'text-red-600')}>
+            {formatPrice(filteredProfit)}
+          </p>
+          <p className="text-xs text-gray-400 mt-1">Según costos de recetas e insumos</p>
         </div>
         <div className="card p-6">
           <p className="text-sm text-gray-500">Pendientes</p>
@@ -171,6 +277,9 @@ export default function AdminSales() {
           title="Marcar seleccionados como entregados"
         >
           <CheckSquare className="h-4 w-4" /> Entregados ({selected.size})
+        </button>
+        <button onClick={openManualModal} className="btn-primary" title="Cargar pedido manual (venta en local)">
+          <Plus className="h-4 w-4" /> Pedido en local
         </button>
       </div>
 
@@ -234,13 +343,27 @@ export default function AdminSales() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <p className="font-bold text-primary text-lg">{formatPrice(Number(order.total))}</p>
+                    <div className="text-right">
+                      <p className="font-bold text-primary text-lg">{formatPrice(Number(order.total))}</p>
+                      {order.status !== 'cancelled' && (
+                        <p className={cn('text-xs font-semibold', orderProfit(order) >= 0 ? 'text-green-600' : 'text-red-600')}>
+                          Gana: {formatPrice(orderProfit(order))}
+                        </p>
+                      )}
+                    </div>
                     <button
                       onClick={() => printOrderTicket(order)}
                       className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700"
                       title="Imprimir comanda"
                     >
                       <Printer className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => deleteOrder(order)}
+                      className="p-2 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600"
+                      title="Eliminar pedido"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : order.id)}
@@ -291,6 +414,20 @@ export default function AdminSales() {
                             <span>Total</span>
                             <span className="text-primary">{formatPrice(Number(order.total))}</span>
                           </div>
+                          {order.status !== 'cancelled' && (
+                            <>
+                              <div className="flex justify-between">
+                                <span className="text-gray-500">Costo estimado</span>
+                                <span>{formatPrice(orderCost(order))}</span>
+                              </div>
+                              <div className="flex justify-between font-bold">
+                                <span>Ganancia estimada</span>
+                                <span className={orderProfit(order) >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                  {formatPrice(orderProfit(order))}
+                                </span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div>
@@ -339,6 +476,160 @@ export default function AdminSales() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal pedido manual */}
+      {manualOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setManualOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div>
+                <h2 className="text-xl font-bold">Pedido en local</h2>
+                <p className="text-sm text-gray-500">Venta directa en el mostrador</p>
+              </div>
+              <button onClick={() => setManualOpen(false)} className="p-2 rounded-full hover:bg-gray-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {!computeIsOpen(config.opening_hours) && (
+                <div className="rounded-xl bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
+                  ⚠️ Estás fuera del horario de atención
+                  {commonSchedule(config.opening_hours) ? ` (${commonSchedule(config.opening_hours)})` : ''}.
+                  Como admin podés cargarlo igual.
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Nombre del cliente *</label>
+                  <input
+                    className="input"
+                    value={manualName}
+                    onChange={(e) => setManualName(e.target.value)}
+                    placeholder="Ej: Juan Pérez"
+                  />
+                </div>
+                <div>
+                  <label className="label">Teléfono (opcional)</label>
+                  <input
+                    className="input"
+                    value={manualPhone}
+                    onChange={(e) => setManualPhone(e.target.value)}
+                    placeholder="Ej: 11 1234 5678"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Productos</label>
+                <div className="space-y-2">
+                  {manualItems.map((item, ii) => (
+                    <div key={ii} className="flex items-center gap-2">
+                      <select
+                        className="input flex-1 min-w-[150px]"
+                        value={item.product_id}
+                        onChange={(e) => {
+                          const prod = products.find((p) => p.id === e.target.value);
+                          const next = [...manualItems];
+                          next[ii] = {
+                            ...item,
+                            product_id: e.target.value,
+                            product_name: prod ? prod.name : '',
+                            product_price: prod ? Number(prod.price) : 0,
+                          };
+                          setManualItems(next);
+                        }}
+                      >
+                        <option value="">Elegí un producto...</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({formatPrice(p.price)})
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="input w-20"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const next = [...manualItems];
+                          next[ii] = { ...item, quantity: Number(e.target.value) };
+                          setManualItems(next);
+                        }}
+                        placeholder="Cant."
+                      />
+                      <span className="text-sm font-semibold text-gray-600 w-24 text-right shrink-0">
+                        {item.product_id ? formatPrice(Number(item.product_price) * Number(item.quantity || 0)) : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setManualItems(manualItems.filter((_, i) => i !== ii))}
+                        className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 shrink-0"
+                        aria-label="Quitar producto"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setManualItems([
+                        ...manualItems,
+                        { product_id: '', product_name: '', product_price: 0, quantity: 1 },
+                      ])
+                    }
+                    className="text-sm text-primary font-semibold hover:underline"
+                  >
+                    + Agregar producto
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Forma de pago</label>
+                  <select
+                    className="input"
+                    value={manualPayment}
+                    onChange={(e) => setManualPayment(e.target.value as 'cash' | 'transfer')}
+                  >
+                    <option value="cash">Efectivo</option>
+                    <option value="transfer">Transferencia</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Total</label>
+                  <p className="text-xl font-bold text-primary pt-2">{formatPrice(manualSubtotal)}</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Notas (opcional)</label>
+                <input
+                  className="input"
+                  value={manualNotes}
+                  onChange={(e) => setManualNotes(e.target.value)}
+                  placeholder="Ej: sin cebolla, para llevar..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setManualOpen(false)} className="btn-secondary flex-1">
+                  Cancelar
+                </button>
+                <button type="button" onClick={saveManualOrder} className="btn-primary flex-1" disabled={manualSaving}>
+                  {manualSaving ? 'Guardando...' : 'Cargar pedido'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

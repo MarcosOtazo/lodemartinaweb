@@ -8,6 +8,8 @@ import { useCartStore } from '../store/cart';
 import { useConfigStore } from '../store/config';
 import {
   buildWhatsAppMessage,
+  commonSchedule,
+  computeIsOpen,
   formatPrice,
   openWhatsApp,
   toOrderItems,
@@ -41,9 +43,15 @@ export default function Checkout() {
   const belowMinimum = Number(config.min_order_amount) > 0 && subtotal() < Number(config.min_order_amount);
   const cashAmountNum = Number(cashAmount);
   const change = cashAmountNum > 0 ? cashAmountNum - total : 0;
+  const isOpen = computeIsOpen(config.opening_hours);
+  const scheduleText = commonSchedule(config.opening_hours);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isOpen) {
+      toast.error('Estamos cerrados en este momento');
+      return;
+    }
     if (!name.trim() || !phone.trim()) {
       toast.error('Completá tu nombre y teléfono');
       return;
@@ -133,6 +141,21 @@ export default function Checkout() {
   return (
     <div className="container-main py-8 max-w-4xl">
       <h1 className="text-3xl font-bold mb-6">Finalizar pedido</h1>
+
+      {!isOpen && (
+        <div className="card p-5 mb-6 bg-red-50 border-red-200 flex items-start gap-3">
+          <span className="text-2xl">😴</span>
+          <div>
+            <p className="font-bold text-red-700">Estamos cerrados por el momento</p>
+            <p className="text-sm text-red-600">
+              {scheduleText
+                ? `Nuestro horario de atención es de ${scheduleText}.`
+                : 'Volvé a intentarlo en nuestro horario de atención.'}{' '}
+              Podés armar el carrito, pero el pedido se envía solo cuando estamos abiertos.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <form onSubmit={handleSubmit} className="lg:col-span-3 space-y-6">
@@ -293,8 +316,16 @@ export default function Checkout() {
             />
           </div>
 
-          <button type="submit" className="btn-primary w-full py-4 text-lg" disabled={submitting}>
-            {submitting ? 'Enviando...' : 'Confirmar pedido por WhatsApp 🟢'}
+          <button
+            type="submit"
+            className="btn-primary w-full py-4 text-lg"
+            disabled={submitting || !isOpen}
+          >
+            {!isOpen
+              ? 'Cerrado por el momento 😴'
+              : submitting
+                ? 'Enviando...'
+                : 'Confirmar pedido por WhatsApp 🟢'}
           </button>
           {!user && (
             <p className="text-sm text-gray-500 text-center">

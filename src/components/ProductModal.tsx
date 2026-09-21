@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { X, Plus, Minus } from 'lucide-react';
 import type { Product, ProductOptionGroup, SelectedOption } from '../types';
 import { useCartStore } from '../store/cart';
+import { useConfigStore } from '../store/config';
 import { formatPrice, cn } from '../lib/utils';
 
 interface ProductModalProps {
@@ -16,6 +17,7 @@ export default function ProductModal({ product, optionGroups, onClose }: Product
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [notes, setNotes] = useState('');
   const addItem = useCartStore((s) => s.addItem);
+  const config = useConfigStore((s) => s.config);
 
   const total = useMemo(() => {
     if (!product) return 0;
@@ -83,7 +85,15 @@ export default function ProductModal({ product, optionGroups, onClose }: Product
           {product.image_url ? (
             <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-7xl">🍽️</div>
+            <div className="flex h-full w-full items-center justify-center bg-primary-light">
+              {config.logo_url ? (
+                <img src={config.logo_url} alt={config.site_name} className="h-32 w-32 rounded-full object-cover" />
+              ) : (
+                <span className="flex h-24 w-24 items-center justify-center rounded-full bg-primary text-white text-5xl font-bold">
+                  {config.site_name.charAt(0)}
+                </span>
+              )}
+            </div>
           )}
           <button
             onClick={onClose}
@@ -160,7 +170,7 @@ export default function ProductModal({ product, optionGroups, onClose }: Product
               className="input"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ej: sin cebolla, bien cocido..."
+              placeholder="Ej: sin huevo, bien cocido..."
             />
           </div>
         </div>

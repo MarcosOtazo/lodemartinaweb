@@ -158,10 +158,148 @@ export interface Database {
         };
         Relationships: [];
       };
+      insumos: {
+        Row: {
+          id: string;
+          name: string;
+          unit: string;
+          cost: number;
+          category: string;
+          quantity: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          unit?: string;
+          cost?: number;
+          category?: string;
+          quantity?: number;
+        };
+        Update: {
+          name?: string;
+          unit?: string;
+          cost?: number;
+          category?: string;
+          quantity?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      recetas: {
+        Row: {
+          id: string;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+        };
+        Update: {
+          name?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      receta_ingredientes: {
+        Row: {
+          id: string;
+          receta_id: string;
+          insumo_id: string;
+          quantity: number;
+          unit: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          receta_id: string;
+          insumo_id: string;
+          quantity: number;
+          unit?: string;
+        };
+        Update: {
+          receta_id?: string;
+          insumo_id?: string;
+          quantity?: number;
+          unit?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'receta_ingredientes_insumo_id_fkey';
+            columns: ['insumo_id'];
+            isOneToOne: false;
+            referencedRelation: 'insumos';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      receta_subrecetas: {
+        Row: {
+          id: string;
+          receta_id: string;
+          subreceta_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          receta_id: string;
+          subreceta_id: string;
+        };
+        Update: {
+          receta_id?: string;
+          subreceta_id?: string;
+        };
+        Relationships: [];
+      };
+      producto_recetas: {
+        Row: {
+          id: string;
+          product_id: string;
+          receta_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          receta_id: string;
+        };
+        Update: {
+          product_id?: string;
+          receta_id?: string;
+        };
+        Relationships: [];
+      };
+      producto_insumos: {
+        Row: {
+          id: string;
+          product_id: string;
+          insumo_id: string;
+          quantity: number;
+          unit: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          insumo_id: string;
+          quantity: number;
+          unit?: string;
+        };
+        Update: {
+          product_id?: string;
+          insumo_id?: string;
+          quantity?: number;
+          unit?: string;
+        };
+        Relationships: [];
+      };
       orders: {
         Row: {
           id: string;
-          user_id: string;
+          user_id: string | null;
           user_name: string;
           user_phone: string;
           items: Json;
@@ -177,7 +315,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          user_id: string;
+          user_id?: string | null;
           user_name: string;
           user_phone: string;
           items?: Json;

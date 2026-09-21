@@ -1,4 +1,5 @@
 import type { Product } from '../types';
+import { useConfigStore } from '../store/config';
 import { formatPrice } from '../lib/utils';
 
 interface ProductRowProps {
@@ -7,6 +8,8 @@ interface ProductRowProps {
 }
 
 export default function ProductRow({ product, onOpen }: ProductRowProps) {
+  const config = useConfigStore((s) => s.config);
+
   return (
     <button
       type="button"
@@ -21,8 +24,14 @@ export default function ProductRow({ product, onOpen }: ProductRowProps) {
           loading="lazy"
         />
       ) : (
-        <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-xl bg-gray-100 flex items-center justify-center text-4xl shrink-0">
-          🍽️
+        <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-xl bg-primary-light flex items-center justify-center shrink-0 overflow-hidden">
+          {config.logo_url ? (
+            <img src={config.logo_url} alt={config.site_name} className="h-16 w-16 rounded-full object-cover" />
+          ) : (
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-white text-xl font-bold">
+              {config.site_name.charAt(0)}
+            </span>
+          )}
         </div>
       )}
       <div className="flex-1 min-w-0">

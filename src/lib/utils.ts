@@ -114,7 +114,36 @@ export function toOrderItems(items: CartItem[]): OrderItem[] {
 
 export const DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 
-export const DAY_LABELS: Record<string, string> = {
+const UNIT_PAIRS: [string, string, number][] = [
+  ['kg', 'gr', 1000],
+  ['litro', 'ml', 1000],
+  ['docena', 'unidad', 12],
+];
+
+export function compatibleUnits(baseUnit: string): string[] {
+  for (const [a, b] of UNIT_PAIRS) {
+    if (baseUnit === a || baseUnit === b) return [a, b];
+  }
+  return [baseUnit];
+}
+
+export function toBaseQuantity(baseUnit: string, displayUnit: string, qty: number): number {
+  if (baseUnit === displayUnit) return qty;
+  for (const [a, b, f] of UNIT_PAIRS) {
+    if (baseUnit === a && displayUnit === b) return qty / f;
+    if (baseUnit === b && displayUnit === a) return qty * f;
+  }
+  return qty;
+}
+
+export function fromBaseQuantity(baseUnit: string, displayUnit: string, qty: number): number {
+  return toBaseQuantity(displayUnit, baseUnit, qty);
+}
+
+export function unitCostOf(insumo: { cost: number; quantity?: number }): number {
+  const bulk = Number(insumo.quantity) || 1;
+  return Number(insumo.cost) / (bulk > 0 ? bulk : 1);
+}export const DAY_LABELS: Record<string, string> = {
   monday: 'Lunes',
   tuesday: 'Martes',
   wednesday: 'Miércoles',
