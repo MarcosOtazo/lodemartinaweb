@@ -27,6 +27,7 @@ export default function AdminSales() {
   const config = useConfigStore((s) => s.config);
   const [loading, setLoading] = useState(true);
   const [productCosts, setProductCosts] = useState<Record<string, number>>({});
+  const [optionCosts, setOptionCosts] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -39,6 +40,9 @@ export default function AdminSales() {
   const [manualPhone, setManualPhone] = useState('');
   const [manualPayment, setManualPayment] = useState<'cash' | 'transfer'>('cash');
   const [manualNotes, setManualNotes] = useState('');
+  const [manualCashAmount, setManualCashAmount] = useState('');
+  const [manualDiscountType, setManualDiscountType] = useState<'amount' | 'percent'>('amount');
+  const [manualDiscountValue, setManualDiscountValue] = useState('');
   const [manualItems, setManualItems] = useState<
     { product_id: string; product_name: string; product_price: number; quantity: number }[]
   >([]);
@@ -56,7 +60,10 @@ export default function AdminSales() {
 
   useEffect(() => {
     loadOrders();
-    fetchCostData().then((d) => setProductCosts(d.productCosts));
+    fetchCostData().then((d) => {
+      setProductCosts(d.productCosts);
+      setOptionCosts(d.optionCosts);
+    });
     supabase
       .from('products')
       .select('*')
@@ -83,10 +90,13 @@ export default function AdminSales() {
 
   const orderCost = (order: Order): number => {
     const items = (order.items as unknown as OrderItem[]) || [];
-    return items.reduce(
-      (s, it) => s + (productCosts[it.product_id] || 0) * it.quantity,
-      0
-    );
+    return items.reduce((s, it) => {
+      let cost = (productCosts[it.product_id] || 0) * it.quantity;
+      for (const opt of it.selected_options || []) {
+        cost += (optionCosts[`${it.product_id}::${opt.item_name}`] || 0) * it.quantity;
+      }
+      return s + cost;
+    }, 0);
   };
 
   const orderProfit = (order: Order): number => Number(order.total) - orderCost(order);
@@ -143,6 +153,9 @@ export default function AdminSales() {
     setManualPhone('');
     setManualPayment('cash');
     setManualNotes('');
+    setManualCashAmount('');
+    setManualDiscountType('amount');
+    setManualDiscountValue('');
     setManualItems([{ product_id: '', product_name: '', product_price: 0, quantity: 1 }]);
     setManualOpen(true);
   };
@@ -151,6 +164,18 @@ export default function AdminSales() {
     (s, it) => s + Number(it.product_price || 0) * Number(it.quantity || 0),
     0
   );
+
+  const manualDiscountAmount = (() => {
+    const raw = Number(manualDiscountValue) || 0;
+    if (raw <= 0) return 0;
+    const disc = manualDiscountType === 'percent' ? (manualSubtotal * raw) / 100 : raw;
+    return Math.min(disc, manualSubtotal);
+  })();
+  const manualDiscountPct =
+    manualSubtotal > 0 ? (manualDiscountAmount / manualSubtotal) * 100 : 0;
+  const manualTotal = manualSubtotal - manualDiscountAmount;
+  const manualCashNum = Number(manualCashAmount) || 0;
+  const manualChange = manualCashNum - manualTotal;
 
   const saveManualOrder = async () => {
     if (!manualName.trim()) {
@@ -162,8 +187,23 @@ export default function AdminSales() {
       toast.error('Agregá al menos un producto con cantidad');
       return;
     }
+    if (manualPayment === 'cash' && (manualCashNum <= 0 || manualCashNum < manualTotal)) {
+      toast.error('Ingresá con cuánto paga el cliente');
+      return;
+    }
     setManualSaving(true);
     try {
+      const noteParts = [manualNotes.trim(), 'Pedido cargado en local'];
+      if (manualDiscountAmount > 0) {
+        noteParts.push(
+          `Descuento: ${formatPrice(manualDiscountAmount)} (${manualDiscountPct.toFixed(1)}%)`
+        );
+      }
+      if (manualPayment === 'cash') {
+        noteParts.push(
+          `Paga con: ${formatPrice(manualCashNum)}${manualChange > 0 ? ` (vuelto: ${formatPrice(manualChange)})` : ''}`
+        );
+      }
       const { error } = await supabase.from('orders').insert({
         user_id: null,
         user_name: manualName.trim(),
@@ -171,10 +211,10 @@ export default function AdminSales() {
         items: validItems as unknown as Json,
         subtotal: manualSubtotal,
         delivery_fee: 0,
-        total: manualSubtotal,
+        total: manualTotal,
         status: 'confirmed',
         payment_method: manualPayment,
-        notes: [manualNotes.trim(), 'Pedido cargado en local'].filter(Boolean).join(' | '),
+        notes: noteParts.filter(Boolean).join(' | '),
       });
       if (error) throw error;
       toast.success('Pedido cargado');
@@ -604,10 +644,90 @@ export default function AdminSales() {
                     <option value="transfer">Transferencia</option>
                   </select>
                 </div>
+                {manualPayment === 'cash' && (
+                  <div>
+                    <label className="label">¿Con cuánto paga?</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="input"
+                      value={manualCashAmount}
+                      onChange={(e) => setManualCashAmount(e.target.value)}
+                      placeholder={`Total: ${formatPrice(manualTotal)}`}
+                    />
+                    {manualCashNum > 0 && manualCashNum >= manualTotal && (
+                      <p className="text-xs font-semibold text-green-700 mt-1">
+                        Vuelto: {formatPrice(manualChange)}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 items-end">
                 <div>
-                  <label className="label">Total</label>
-                  <p className="text-xl font-bold text-primary pt-2">{formatPrice(manualSubtotal)}</p>
+                  <label className="label">Tipo de descuento</label>
+                  <select
+                    className="input"
+                    value={manualDiscountType}
+                    onChange={(e) => setManualDiscountType(e.target.value as 'amount' | 'percent')}
+                  >
+                    <option value="amount">En $</option>
+                    <option value="percent">En %</option>
+                  </select>
                 </div>
+                <div>
+                  <label className="label">
+                    Descuento {manualDiscountType === 'percent' ? '(%)' : '($)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="input"
+                    value={manualDiscountValue}
+                    onChange={(e) => setManualDiscountValue(e.target.value)}
+                    placeholder={manualDiscountType === 'percent' ? 'Ej: 10' : 'Ej: 500'}
+                  />
+                </div>
+                <div>
+                  {manualDiscountAmount > 0 && (
+                    <p className="text-sm text-gray-600">
+                      -{formatPrice(manualDiscountAmount)}{' '}
+                      <span className="font-semibold text-primary">
+                        ({manualDiscountPct.toFixed(1)}%)
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Subtotal</span>
+                  <span className="font-semibold">{formatPrice(manualSubtotal)}</span>
+                </div>
+                {manualDiscountAmount > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">
+                      Descuento ({manualDiscountPct.toFixed(1)}%)
+                    </span>
+                    <span className="font-semibold text-red-600">
+                      -{formatPrice(manualDiscountAmount)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-gray-200 pt-1">
+                  <span className="font-bold">Total</span>
+                  <span className="font-bold text-primary text-lg">{formatPrice(manualTotal)}</span>
+                </div>
+                {manualPayment === 'cash' && manualCashNum >= manualTotal && manualCashNum > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Vuelto</span>
+                    <span className="font-bold text-green-600">{formatPrice(manualChange)}</span>
+                  </div>
+                )}
               </div>
 
               <div>

@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useConfigStore } from '../../store/config';
 import type { Category, Insumo, Product, ProductCategory, Receta } from '../../types';
 import { formatPrice, cn, compatibleUnits, toBaseQuantity, fromBaseQuantity, unitCostOf } from '../../lib/utils';
-import { Plus, Pencil, Trash2, X, Search, Tags, ChefHat, Wallet, Copy } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, Tags, ChefHat, Wallet, Copy, Package } from 'lucide-react';
 
 type OptionItemDraft = {
   id?: string;
@@ -90,6 +90,10 @@ export default function AdminProducts() {
   const [productInsumoRows, setProductInsumoRows] = useState<
     { id?: string; insumo_id: string; unit: string; quantity: number; _deleted?: boolean }[]
   >([]);
+  const [itemInsumoRows, setItemInsumoRows] = useState<
+    Record<string, { id?: string; insumo_id: string; unit: string; quantity: number; _deleted?: boolean }[]>
+  >({});
+  const [variantInsumoDraft, setVariantInsumoDraft] = useState<{ key: string; itemName: string } | null>(null);
   const [productCosts, setProductCosts] = useState<Record<string, number>>({});
   const [recipeUsage, setRecipeUsage] = useState<Record<string, number>>({});
 
@@ -125,13 +129,16 @@ export default function AdminProducts() {
   };
 
   const loadRecetas = async () => {
-    const [rRes, ingRes, subRes, prRes, piRes, iRes] = await Promise.all([
+    const [rRes, ingRes, subRes, prRes, piRes, iRes, oiRes, viiRes, poRes] = await Promise.all([
       supabase.from('recetas').select('*').order('name'),
       supabase.from('receta_ingredientes').select('*'),
       supabase.from('receta_subrecetas').select('*'),
       supabase.from('producto_recetas').select('*'),
       supabase.from('producto_insumos').select('*'),
       supabase.from('insumos').select('*'),
+      supabase.from('option_items').select('*'),
+      supabase.from('option_item_insumos').select('*'),
+      supabase.from('product_options').select('*'),
     ]);
     const insumosData = (iRes.data || []) as Insumo[];
     const costMap = new Map(insumosData.map((i) => [i.id, unitCostOf(i)]));
@@ -194,6 +201,32 @@ export default function AdminProducts() {
       const cur = byProduct.get(pi.product_id) || 0;
       byProduct.set(pi.product_id, cur + (costMap.get(pi.insumo_id) || 0) * Number(pi.quantity));
     });
+
+    // Costo de las variantes por producto (se suman todas)
+    const optionItems = (oiRes.data || []) as unknown as Array<{ id: string; option_id: string }>;
+    const optionInsumos = (viiRes.data || []) as unknown as Array<{
+      option_item_id: string;
+      insumo_id: string;
+      quantity: number;
+    }>;
+    const productOptions = (poRes.data || []) as unknown as Array<{ id: string; product_id: string }>;
+
+    const itemCost = new Map<string, number>();
+    optionInsumos.forEach((oi) => {
+      const cur = itemCost.get(oi.option_item_id) || 0;
+      itemCost.set(oi.option_item_id, cur + (costMap.get(oi.insumo_id) || 0) * Number(oi.quantity));
+    });
+    const optionToProduct = new Map<string, string>();
+    productOptions.forEach((po) => optionToProduct.set(po.id, po.product_id));
+    optionItems.forEach((it) => {
+      const productId = optionToProduct.get(it.option_id);
+      if (!productId) return;
+      const cost = itemCost.get(it.id) || 0;
+      if (cost > 0) {
+        byProduct.set(productId, (byProduct.get(productId) || 0) + cost);
+      }
+    });
+
     setProductCosts(Object.fromEntries(byProduct));
     setRecipeUsage(Object.fromEntries(usage));
   };
@@ -403,6 +436,7 @@ export default function AdminProducts() {
         supabase.from('producto_insumos').select('*').eq('product_id', product.id),
       ]);
       const { data, error } = optRes;
+      let loadedGroups: OptionGroupDraft[] = [];
       if (error) {
         console.error('Error al cargar opciones:', error.message);
         setOptionGroups([]);
@@ -417,7 +451,7 @@ export default function AdminProducts() {
           max_selections: number;
           option_items: Array<{ id: string; name: string; price: number }>;
         }>;
-        const groups: OptionGroupDraft[] = rows.map((g) => ({
+        loadedGroups = rows.map((g) => ({
           id: g.id,
           name: g.name,
           required: g.required,
@@ -429,7 +463,7 @@ export default function AdminProducts() {
               ? g.option_items.map((it) => ({ id: it.id, name: it.name, price: Number(it.price) }))
               : [{ name: '', price: 0 }],
         }));
-        setOptionGroups(groups);
+        setOptionGroups(loadedGroups);
       }
       setProductRecipeRows(
         ((prRes.data || []) as unknown as { id: string; receta_id: string }[]).map((r) => ({
@@ -453,16 +487,46 @@ export default function AdminProducts() {
         )
       );
       setEditing(product);
+      const itemIds = loadedGroups.flatMap((g) => g.items.filter((it) => it.id).map((it) => it.id as string));
+      if (itemIds.length > 0) {
+        const { data: vii } = await supabase
+          .from('option_item_insumos')
+          .select('*')
+          .in('option_item_id', itemIds);
+        const map: Record<string, { id?: string; insumo_id: string; unit: string; quantity: number; _deleted?: boolean }[]> = {};
+        for (const row of (vii || []) as unknown as {
+          id: string;
+          option_item_id: string;
+          insumo_id: string;
+          quantity: number;
+          unit: string;
+        }[]) {
+          const insumo = insumos.find((i) => i.id === row.insumo_id);
+          const unit = row.unit && compatibleUnits(insumo?.unit || row.unit).includes(row.unit) ? row.unit : insumo?.unit || 'unidad';
+          if (!map[row.option_item_id]) map[row.option_item_id] = [];
+          map[row.option_item_id].push({
+            id: row.id,
+            insumo_id: row.insumo_id,
+            unit,
+            quantity: Number(fromBaseQuantity(insumo?.unit || unit, unit, Number(row.quantity)).toFixed(4)),
+          });
+        }
+        setItemInsumoRows(map);
+      } else {
+        setItemInsumoRows({});
+      }
     } else {
       setOptionGroups([]);
       setProductRecipeRows([]);
       setProductInsumoRows([]);
+      setItemInsumoRows({});
       setEditing({ ...EMPTY_PRODUCT });
     }
   };
 
   const saveOptionGroups = async (productId: string) => {
-    for (const group of optionGroups) {
+    for (let gi = 0; gi < optionGroups.length; gi++) {
+      const group = optionGroups[gi];
       if (group._deleted) {
         if (group.id) {
           const { error } = await supabase.from('product_options').delete().eq('id', group.id);
@@ -495,7 +559,7 @@ export default function AdminProducts() {
             multiple: group.multiple,
             min_selections: group.min_selections,
             max_selections: group.max_selections,
-            sort_order: optionGroups.indexOf(group),
+            sort_order: gi,
           })
           .select()
           .single();
@@ -503,7 +567,8 @@ export default function AdminProducts() {
         groupId = data.id;
       }
 
-      for (const item of group.items) {
+      for (let ii = 0; ii < group.items.length; ii++) {
+        const item = group.items[ii];
         if (item._deleted) {
           if (item.id) {
             const { error } = await supabase.from('option_items').delete().eq('id', item.id);
@@ -512,20 +577,54 @@ export default function AdminProducts() {
           continue;
         }
         if (!item.name.trim()) continue;
-        if (item.id) {
+
+        let itemId = item.id;
+        if (itemId) {
           const { error } = await supabase
             .from('option_items')
             .update({ name: item.name, price: item.price })
-            .eq('id', item.id);
+            .eq('id', itemId);
           if (error) throw error;
         } else {
-          const { error } = await supabase.from('option_items').insert({
-            option_id: groupId,
-            name: item.name,
-            price: item.price,
-            sort_order: group.items.indexOf(item),
-          });
+          const { data, error } = await supabase
+            .from('option_items')
+            .insert({
+              option_id: groupId,
+              name: item.name,
+              price: item.price,
+              sort_order: ii,
+            })
+            .select()
+            .single();
           if (error) throw error;
+          itemId = data.id;
+        }
+
+        const key = item.id || `new-${gi}-${ii}`;
+        const rows = itemInsumoRows[key] || [];
+        for (const row of rows) {
+          if (row._deleted) {
+            if (row.id) await supabase.from('option_item_insumos').delete().eq('id', row.id);
+            continue;
+          }
+          if (!row.insumo_id || Number(row.quantity) <= 0) continue;
+          const insumo = insumos.find((i) => i.id === row.insumo_id);
+          const baseQty = insumo ? toBaseQuantity(insumo.unit, row.unit, Number(row.quantity)) : Number(row.quantity);
+          if (row.id) {
+            const { error } = await supabase
+              .from('option_item_insumos')
+              .update({ insumo_id: row.insumo_id, quantity: baseQty, unit: row.unit })
+              .eq('id', row.id);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase.from('option_item_insumos').insert({
+              option_item_id: itemId,
+              insumo_id: row.insumo_id,
+              quantity: baseQty,
+              unit: row.unit,
+            });
+            if (error) throw error;
+          }
         }
       }
     }
@@ -704,7 +803,7 @@ export default function AdminProducts() {
         min_selections: number;
         max_selections: number;
         sort_order: number;
-        option_items: Array<{ name: string; price: number; sort_order: number }>;
+        option_items: Array<{ id: string; name: string; price: number; sort_order: number }>;
       }>) {
         const { data: newGroup, error: gErr } = await supabase
           .from('product_options')
@@ -721,13 +820,34 @@ export default function AdminProducts() {
           .single();
         if (gErr) throw gErr;
         for (const it of g.option_items || []) {
-          const { error: itErr } = await supabase.from('option_items').insert({
-            option_id: newGroup.id,
-            name: it.name,
-            price: Number(it.price),
-            sort_order: it.sort_order,
-          });
+          const { data: newItem, error: itErr } = await supabase
+            .from('option_items')
+            .insert({
+              option_id: newGroup.id,
+              name: it.name,
+              price: Number(it.price),
+              sort_order: it.sort_order,
+            })
+            .select()
+            .single();
           if (itErr) throw itErr;
+          const { data: vii } = await supabase
+            .from('option_item_insumos')
+            .select('*')
+            .eq('option_item_id', it.id);
+          for (const row of (vii || []) as unknown as {
+            insumo_id: string;
+            quantity: number;
+            unit: string;
+          }[]) {
+            const { error: viErr } = await supabase.from('option_item_insumos').insert({
+              option_item_id: newItem.id,
+              insumo_id: row.insumo_id,
+              quantity: row.quantity,
+              unit: row.unit,
+            });
+            if (viErr) throw viErr;
+          }
         }
       }
 
@@ -1457,15 +1577,44 @@ export default function AdminProducts() {
                     const baseQty = toBaseQuantity(insumo.unit, row.unit, Number(row.quantity || 0));
                     return s + unitCostOf(insumo) * baseQty;
                   }, 0);
-                  const totalCost = recetasCost + insumosCost;
-                  const profit = Number(editing.price) - totalCost;
+                  const variantsCost = optionGroups.reduce((s, group, gi) => {
+                    if (group._deleted) return s;
+                    return (
+                      s +
+                      group.items.reduce((s2, item, ii) => {
+                        if (item._deleted || !item.name.trim()) return s2;
+                        const key = item.id || `new-${gi}-${ii}`;
+                        const rows = itemInsumoRows[key] || [];
+                        return (
+                          s2 +
+                          rows.reduce((s3, row) => {
+                            if (row._deleted || !row.insumo_id) return s3;
+                            const insumo = insumos.find((i) => i.id === row.insumo_id);
+                            if (!insumo) return s3;
+                            const baseQty = toBaseQuantity(insumo.unit, row.unit, Number(row.quantity || 0));
+                            return s3 + unitCostOf(insumo) * baseQty;
+                          }, 0)
+                        );
+                      }, 0)
+                    );
+                  }, 0);
+                  const variantsPrice = optionGroups.reduce((s, group) => {
+                    if (group._deleted) return s;
+                    return s + group.items.reduce((s2, item) => {
+                      if (item._deleted || !item.name.trim()) return s2;
+                      return s2 + Number(item.price || 0);
+                    }, 0);
+                  }, 0);
+                  const totalCost = recetasCost + insumosCost + variantsCost;
+                  const totalPrice = Number(editing.price) + variantsPrice;
+                  const profit = totalPrice - totalCost;
                   if (totalCost <= 0) return null;
-                  const marginPct = Number(editing.price) > 0 ? (profit / Number(editing.price)) * 100 : 0;
+                  const marginPct = totalPrice > 0 ? (profit / totalPrice) * 100 : 0;
                   const markupPct = totalCost > 0 ? (profit / totalCost) * 100 : null;
                   return (
                     <div className="mt-3 rounded-xl bg-gray-50 border border-gray-200 p-3 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Costo total</span>
+                        <span className="text-gray-600">Costo total (incluye variantes)</span>
                         <span className="font-bold">{formatPrice(totalCost)}</span>
                       </div>
                       <div className="flex justify-between mt-1">
@@ -1664,6 +1813,20 @@ export default function AdminProducts() {
                                 title="Precio extra de esta variante"
                               />
                             </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setVariantInsumoDraft({
+                                  key: item.id || `new-${gi}-${ii}`,
+                                  itemName: item.name.trim() || `Variante ${ii + 1}`,
+                                })
+                              }
+                              className="p-2 rounded-lg hover:bg-primary-light text-gray-500 hover:text-primary shrink-0"
+                              aria-label="Insumos de la variante"
+                              title="Insumos y costo de esta variante"
+                            >
+                              <Package className="h-4 w-4" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -2032,6 +2195,145 @@ export default function AdminProducts() {
           </div>
         </div>
       )}
+
+      {/* Modal insumos de variante */}
+      {variantInsumoDraft &&
+        (() => {
+          const rows = itemInsumoRows[variantInsumoDraft.key] || [];
+          const setRows = (next: typeof rows) =>
+            setItemInsumoRows((prev) => ({ ...prev, [variantInsumoDraft.key]: next }));
+          const totalCost = rows.reduce((s, row) => {
+            if (row._deleted || !row.insumo_id) return s;
+            const insumo = insumos.find((i) => i.id === row.insumo_id);
+            if (!insumo) return s;
+            const baseQty = toBaseQuantity(insumo.unit, row.unit, Number(row.quantity || 0));
+            return s + unitCostOf(insumo) * baseQty;
+          }, 0);
+          return (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setVariantInsumoDraft(null)} />
+              <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                  <div>
+                    <h2 className="text-xl font-bold">Insumos de la variante</h2>
+                    <p className="text-sm text-gray-500">{variantInsumoDraft.itemName}</p>
+                  </div>
+                  <button onClick={() => setVariantInsumoDraft(null)} className="p-2 rounded-full hover:bg-gray-100">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  <div className="space-y-2">
+                    {rows.map((row, ri) =>
+                      row._deleted ? null : (
+                        <div key={ri} className="flex items-center gap-2 flex-wrap">
+                          <select
+                            className="input flex-1 min-w-[140px]"
+                            value={row.insumo_id}
+                            onChange={(e) => {
+                              const insumo = insumos.find((i) => i.id === e.target.value);
+                              const next = [...rows];
+                              next[ri] = {
+                                ...row,
+                                insumo_id: e.target.value,
+                                unit: insumo ? insumo.unit : row.unit,
+                              };
+                              setRows(next);
+                            }}
+                          >
+                            <option value="">Elegí un insumo...</option>
+                            {insumos.map((i) => (
+                              <option key={i.id} value={i.id}>
+                                {i.name} ({formatPrice(unitCostOf(i))} / {i.unit})
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.001"
+                            className="input w-24"
+                            value={row.quantity}
+                            onChange={(e) => {
+                              const next = [...rows];
+                              next[ri] = { ...row, quantity: Number(e.target.value) };
+                              setRows(next);
+                            }}
+                            placeholder="Cant."
+                          />
+                          <select
+                            className="input w-20"
+                            value={row.unit}
+                            onChange={(e) => {
+                              const next = [...rows];
+                              next[ri] = { ...row, unit: e.target.value };
+                              setRows(next);
+                            }}
+                            disabled={!row.insumo_id}
+                            title="Unidad"
+                          >
+                            {compatibleUnits(
+                              insumos.find((i) => i.id === row.insumo_id)?.unit || row.unit
+                            ).map((u) => (
+                              <option key={u} value={u}>
+                                {u}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="text-sm font-semibold text-gray-600 w-20 text-right shrink-0">
+                            {(() => {
+                              const insumo = insumos.find((i) => i.id === row.insumo_id);
+                              if (!insumo) return '';
+                              const baseQty = toBaseQuantity(insumo.unit, row.unit, Number(row.quantity || 0));
+                              return formatPrice(unitCostOf(insumo) * baseQty);
+                            })()}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = [...rows];
+                              next[ri] = { ...row, _deleted: true };
+                              setRows(next);
+                            }}
+                            className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 shrink-0"
+                            aria-label="Quitar insumo"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setRows([...rows, { insumo_id: '', unit: 'unidad', quantity: 0 }])}
+                      className="text-sm text-primary font-semibold hover:underline"
+                    >
+                      + Agregar insumo
+                    </button>
+                  </div>
+
+                  <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 flex justify-between text-sm">
+                    <span className="text-gray-600">Costo de esta variante</span>
+                    <span className="font-bold">{formatPrice(totalCost)}</span>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Se guarda junto con el producto. Cuando un pedido incluye esta variante, su
+                    costo se descuenta de la ganancia.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => setVariantInsumoDraft(null)}
+                    className="btn-primary w-full"
+                  >
+                    Listo
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
     </div>
   );
 }

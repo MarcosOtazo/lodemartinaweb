@@ -4,16 +4,20 @@ export interface CostData {
   insumosCost: Map<string, number>;
   recetaCosts: Map<string, number>;
   productCosts: Record<string, number>;
+  optionCosts: Record<string, number>;
 }
 
 export async function fetchCostData(): Promise<CostData> {
-  const [iRes, rRes, ingRes, subRes, prRes, piRes] = await Promise.all([
+  const [iRes, rRes, ingRes, subRes, prRes, piRes, oiRes, viiRes, poRes] = await Promise.all([
     supabase.from('insumos').select('*'),
     supabase.from('recetas').select('*'),
     supabase.from('receta_ingredientes').select('*'),
     supabase.from('receta_subrecetas').select('*'),
     supabase.from('producto_recetas').select('*'),
     supabase.from('producto_insumos').select('*'),
+    supabase.from('option_items').select('*'),
+    supabase.from('option_item_insumos').select('*'),
+    supabase.from('product_options').select('*'),
   ]);
 
   const insumos = (iRes.data || []) as unknown as Array<{ id: string; cost: number; quantity: number }>;
@@ -73,5 +77,38 @@ export async function fetchCostData(): Promise<CostData> {
       (productCosts[pi.product_id] || 0) + (insumosCost.get(pi.insumo_id) || 0) * Number(pi.quantity);
   });
 
-  return { insumosCost, recetaCosts, productCosts };
+  // Costo por variante (option item) y mapeo a producto para los pedidos
+  const optionItems = (oiRes.data || []) as unknown as Array<{
+    id: string;
+    option_id: string;
+    name: string;
+  }>;
+  const optionInsumos = (viiRes.data || []) as unknown as Array<{
+    option_item_id: string;
+    insumo_id: string;
+    quantity: number;
+  }>;
+  const productOptions = (poRes.data || []) as unknown as Array<{ id: string; product_id: string }>;
+
+  const optionItemCost = new Map<string, number>();
+  optionInsumos.forEach((oi) => {
+    const cur = optionItemCost.get(oi.option_item_id) || 0;
+    optionItemCost.set(
+      oi.option_item_id,
+      cur + (insumosCost.get(oi.insumo_id) || 0) * Number(oi.quantity)
+    );
+  });
+  const optionToProduct = new Map<string, string>();
+  productOptions.forEach((po) => optionToProduct.set(po.id, po.product_id));
+
+  const optionCosts: Record<string, number> = {};
+  optionItems.forEach((it) => {
+    const productId = optionToProduct.get(it.option_id);
+    const cost = optionItemCost.get(it.id) || 0;
+    if (productId && cost > 0) {
+      optionCosts[`${productId}::${it.name}`] = cost;
+    }
+  });
+
+  return { insumosCost, recetaCosts, productCosts, optionCosts };
 }

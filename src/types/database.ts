@@ -272,6 +272,30 @@ export interface Database {
         };
         Relationships: [];
       };
+      option_item_insumos: {
+        Row: {
+          id: string;
+          option_item_id: string;
+          insumo_id: string;
+          quantity: number;
+          unit: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          option_item_id: string;
+          insumo_id: string;
+          quantity: number;
+          unit?: string;
+        };
+        Update: {
+          option_item_id?: string;
+          insumo_id?: string;
+          quantity?: number;
+          unit?: string;
+        };
+        Relationships: [];
+      },
       producto_insumos: {
         Row: {
           id: string;
