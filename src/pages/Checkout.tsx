@@ -217,16 +217,21 @@ export default function Checkout() {
               </button>
             </div>
             {deliveryType === 'delivery' && (
-              <div>
-                <label className="label" htmlFor="address">Dirección de entrega</label>
-                <input
-                  id="address"
-                  className="input"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Calle, número, piso, depto, referencias..."
-                  required
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className="label" htmlFor="address">Dirección de entrega</label>
+                  <input
+                    id="address"
+                    className="input"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Calle, número, piso, depto, referencias..."
+                    required
+                  />
+                </div>
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  El precio de delivery de {formatPrice(deliveryFee)} corresponde a la zona de centro y barrios. Para otras zonas o sectores, y también en días de lluvia, el valor puede variar y se coordina por WhatsApp. Si necesitás, compartí tu ubicación por WhatsApp al confirmar el pedido para que podamos ubicarte mejor.
+                </p>
               </div>
             )}
           </div>

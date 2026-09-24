@@ -403,6 +403,62 @@ export default function AdminProducts() {
     }
   };
 
+  const duplicateReceta = async (receta: Receta) => {
+    try {
+      const { data: newReceta, error: recipeError } = await supabase
+        .from('recetas')
+        .insert({ name: `${receta.name} (copia)` })
+        .select('id')
+        .single();
+      if (recipeError) throw recipeError;
+
+      const [ingredientsResult, subrecipesResult] = await Promise.all([
+        supabase
+          .from('receta_ingredientes')
+          .select('insumo_id, quantity, unit')
+          .eq('receta_id', receta.id),
+        supabase
+          .from('receta_subrecetas')
+          .select('subreceta_id')
+          .eq('receta_id', receta.id),
+      ]);
+      if (ingredientsResult.error) throw ingredientsResult.error;
+      if (subrecipesResult.error) throw subrecipesResult.error;
+
+      const ingredients = ((ingredientsResult.data || []) as unknown as Array<{
+        insumo_id: string;
+        quantity: number;
+        unit: string;
+      }>).map((row) => ({
+        receta_id: newReceta.id,
+        insumo_id: row.insumo_id,
+        quantity: row.quantity,
+        unit: row.unit,
+      }));
+      if (ingredients.length > 0) {
+        const { error } = await supabase.from('receta_ingredientes').insert(ingredients);
+        if (error) throw error;
+      }
+
+      const subrecipes = ((subrecipesResult.data || []) as unknown as Array<{ subreceta_id: string }>).map(
+        (row) => ({
+          receta_id: newReceta.id,
+          subreceta_id: row.subreceta_id,
+        })
+      );
+      if (subrecipes.length > 0) {
+        const { error } = await supabase.from('receta_subrecetas').insert(subrecipes);
+        if (error) throw error;
+      }
+
+      toast.success('Receta duplicada');
+      loadRecetas();
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al duplicar la receta');
+    }
+  };
+
   const deleteReceta = async (receta: Receta) => {
     if (!confirm(`¿Eliminar la receta "${receta.name}"? Los productos que la usan van a quedar sin receta.`)) return;
     const { error } = await supabase.from('recetas').delete().eq('id', receta.id);
@@ -1203,6 +1259,14 @@ export default function AdminProducts() {
                     {recipeUsage[receta.id] || 0} producto(s) la usan
                   </p>
                   <div className="flex gap-1">
+                    <button
+                      onClick={() => duplicateReceta(receta)}
+                      className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-primary"
+                      aria-label="Duplicar receta"
+                      title="Duplicar receta"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
                     <button
                       onClick={() => openRecipeDraft(receta)}
                       className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-primary"

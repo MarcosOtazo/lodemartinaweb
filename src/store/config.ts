@@ -97,6 +97,10 @@ function applyCssVars(config: SiteConfig) {
   root.style.setProperty('--color-primary-hover', shadeColor(config.primary_color, -20));
   root.style.setProperty('--color-primary-light', config.primary_color + '1a');
   root.style.setProperty('--color-secondary', config.secondary_color);
+  const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (favicon) {
+    favicon.href = config.logo_url || '/favicon.svg';
+  }
   if (config.site_name) document.title = config.site_name;
 }
 
