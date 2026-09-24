@@ -95,6 +95,7 @@ export default function AdminProducts() {
   >({});
   const [variantInsumoDraft, setVariantInsumoDraft] = useState<{ key: string; itemName: string } | null>(null);
   const [productCosts, setProductCosts] = useState<Record<string, number>>({});
+  const [productVariantPrices, setProductVariantPrices] = useState<Record<string, number>>({});
   const [recipeUsage, setRecipeUsage] = useState<Record<string, number>>({});
 
   const loadProducts = async () => {
@@ -202,8 +203,7 @@ export default function AdminProducts() {
       byProduct.set(pi.product_id, cur + (costMap.get(pi.insumo_id) || 0) * Number(pi.quantity));
     });
 
-    // Costo de las variantes por producto (se suman todas)
-    const optionItems = (oiRes.data || []) as unknown as Array<{ id: string; option_id: string }>;
+    const optionItems = (oiRes.data || []) as unknown as Array<{ id: string; option_id: string; price: number }>;
     const optionInsumos = (viiRes.data || []) as unknown as Array<{
       option_item_id: string;
       insumo_id: string;
@@ -218,6 +218,7 @@ export default function AdminProducts() {
     });
     const optionToProduct = new Map<string, string>();
     productOptions.forEach((po) => optionToProduct.set(po.id, po.product_id));
+    const variantPrices = new Map<string, number>();
     optionItems.forEach((it) => {
       const productId = optionToProduct.get(it.option_id);
       if (!productId) return;
@@ -225,9 +226,11 @@ export default function AdminProducts() {
       if (cost > 0) {
         byProduct.set(productId, (byProduct.get(productId) || 0) + cost);
       }
+      variantPrices.set(productId, (variantPrices.get(productId) || 0) + Number(it.price || 0));
     });
 
     setProductCosts(Object.fromEntries(byProduct));
+    setProductVariantPrices(Object.fromEntries(variantPrices));
     setRecipeUsage(Object.fromEntries(usage));
   };
 
@@ -1294,7 +1297,7 @@ export default function AdminProducts() {
                     {productCosts[product.id] !== undefined ? (
                       <p className="text-xs mt-1 text-gray-500">
                         <span className="font-semibold text-gray-700">
-                          Costo: {formatPrice(productCosts[product.id])}
+                          Costo configurado: {formatPrice(productCosts[product.id])}
                         </span>
                       </p>
                     ) : (
@@ -1306,24 +1309,23 @@ export default function AdminProducts() {
                     {productCosts[product.id] !== undefined &&
                       (() => {
                         const cost = productCosts[product.id];
-                        const price = Number(product.price);
+                        const price = Number(product.price) + (productVariantPrices[product.id] || 0);
                         const profit = price - cost;
-                        const marginPct = price > 0 ? (profit / price) * 100 : 0;
                         const markupPct = cost > 0 ? (profit / cost) * 100 : null;
                         return (
                           <div className="text-xs whitespace-nowrap">
+                            <span className="block text-gray-500">
+                              Precio total configurado: {formatPrice(price)}
+                            </span>
                             <span className={cn('block font-semibold', profit >= 0 ? 'text-green-600' : 'text-red-600')}>
                               {profit >= 0 ? 'Gana' : 'Pierde'}: {formatPrice(Math.abs(profit))}
                             </span>
                             {markupPct !== null && (
                               <span className={cn('block font-bold', markupPct >= 0 ? 'text-green-700' : 'text-red-600')}>
                                 {markupPct >= 0 ? '+' : ''}
-                                {markupPct.toFixed(0)}% s/ costo
+                                {markupPct.toFixed(0)}% markup s/ costo
                               </span>
                             )}
-                            <span className="text-gray-400">
-                              ({marginPct.toFixed(0)}% margen)
-                            </span>
                           </div>
                         );
                       })()}
@@ -1609,13 +1611,16 @@ export default function AdminProducts() {
                   const totalPrice = Number(editing.price) + variantsPrice;
                   const profit = totalPrice - totalCost;
                   if (totalCost <= 0) return null;
-                  const marginPct = totalPrice > 0 ? (profit / totalPrice) * 100 : 0;
                   const markupPct = totalCost > 0 ? (profit / totalCost) * 100 : null;
                   return (
                     <div className="mt-3 rounded-xl bg-gray-50 border border-gray-200 p-3 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Costo total (incluye variantes)</span>
+                        <span className="text-gray-600">Costo total configurado (producto + variantes)</span>
                         <span className="font-bold">{formatPrice(totalCost)}</span>
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-gray-600">Precio total configurado</span>
+                        <span className="font-bold">{formatPrice(totalPrice)}</span>
                       </div>
                       <div className="flex justify-between mt-1">
                         <span className="text-gray-600">Ganancia</span>
@@ -1625,17 +1630,13 @@ export default function AdminProducts() {
                       </div>
                       {markupPct !== null && (
                         <div className="flex justify-between mt-1">
-                          <span className="text-gray-600">Marcaje sobre costo</span>
+                          <span className="text-gray-600">Markup sobre costo</span>
                           <span className={cn('font-bold', markupPct >= 0 ? 'text-green-700' : 'text-red-600')}>
                             {markupPct >= 0 ? '+' : ''}
                             {markupPct.toFixed(0)}%
                           </span>
                         </div>
                       )}
-                      <div className="flex justify-between mt-1">
-                        <span className="text-gray-600">Margen sobre venta</span>
-                        <span className="font-semibold text-gray-500">{marginPct.toFixed(0)}%</span>
-                      </div>
                     </div>
                   );
                 })()}
