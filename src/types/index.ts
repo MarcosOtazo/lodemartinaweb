@@ -6,6 +6,7 @@ export interface User {
   role: UserRole;
   full_name?: string;
   phone?: string;
+  client_number?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -72,7 +73,7 @@ export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'del
 
 export interface Order {
   id: string;
-  user_id: string;
+  user_id: string | null;
   user_name: string;
   user_phone: string;
   items: OrderItem[];

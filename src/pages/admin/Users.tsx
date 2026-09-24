@@ -19,10 +19,14 @@ export default function AdminUsers() {
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('orders').select('user_id, total, status').limit(1000),
     ]).then(([profilesRes, ordersRes]) => {
-      const orders = (ordersRes.data || []) as unknown as Array<{ user_id: string; total: number; status: string }>;
-      const stats = new Map<string, { count: number; spent: number }>();
-      orders.forEach((o) => {
-        if (o.status === 'cancelled') return;
+       const orders = (ordersRes.data || []) as unknown as Array<{
+         user_id: string | null;
+         total: number;
+         status: string;
+       }>;
+       const stats = new Map<string, { count: number; spent: number }>();
+       orders.forEach((o) => {
+         if (!o.user_id || o.status === 'cancelled') return;
         const cur = stats.get(o.user_id) || { count: 0, spent: 0 };
         cur.count++;
         cur.spent += Number(o.total);
@@ -43,6 +47,7 @@ export default function AdminUsers() {
 
   const filtered = clients.filter(
     (c) =>
+      (c.client_number ? String(c.client_number) : '').includes(search) ||
       (c.full_name || '').toLowerCase().includes(search.toLowerCase()) ||
       c.email.toLowerCase().includes(search.toLowerCase()) ||
       (c.phone || '').includes(search)
@@ -56,7 +61,7 @@ export default function AdminUsers() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <input
           className="input pl-9"
-          placeholder="Buscar por nombre, email o teléfono..."
+           placeholder="Buscar por N.º, nombre, email o teléfono..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -83,7 +88,8 @@ export default function AdminUsers() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-left">
-                <th className="px-6 py-3 font-semibold text-gray-500">Cliente</th>
+                 <th className="px-6 py-3 font-semibold text-gray-500">N.º cliente</th>
+                 <th className="px-6 py-3 font-semibold text-gray-500">Cliente</th>
                 <th className="px-6 py-3 font-semibold text-gray-500">Teléfono</th>
                 <th className="px-6 py-3 font-semibold text-gray-500">Registro</th>
                 <th className="px-6 py-3 font-semibold text-gray-500">Pedidos</th>
@@ -92,8 +98,11 @@ export default function AdminUsers() {
             </thead>
             <tbody>
               {filtered.map((client) => (
-                <tr key={client.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="px-6 py-3">
+                 <tr key={client.id} className="border-b border-gray-50 hover:bg-gray-50">
+                   <td className="px-6 py-3 font-semibold text-primary">
+                     {client.client_number || '—'}
+                   </td>
+                   <td className="px-6 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-light text-primary font-bold">
                         {(client.full_name || client.email).charAt(0).toUpperCase()}

@@ -37,8 +37,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
               email: profile.email,
               role: profile.role,
               full_name: profile.full_name || undefined,
-              phone: profile.phone || undefined,
-              created_at: profile.created_at,
+               phone: profile.phone || undefined,
+               client_number: profile.client_number,
+               created_at: profile.created_at,
               updated_at: profile.updated_at,
             }
           : null,

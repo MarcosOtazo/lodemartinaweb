@@ -83,10 +83,15 @@ export default function Header() {
                 </button>
                 {userMenuOpen && (
                   <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white shadow-lg border border-gray-100 py-1 z-50">
-                    <div className="px-4 py-2 border-b border-gray-100">
-                      <p className="text-sm font-semibold truncate">{user.full_name || user.email}</p>
-                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                    </div>
+                     <div className="px-4 py-2 border-b border-gray-100">
+                       <p className="text-sm font-semibold truncate">{user.full_name || user.email}</p>
+                       <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                       {user.client_number && (
+                         <p className="text-xs text-primary font-semibold mt-1">
+                           N.º cliente: {user.client_number}
+                         </p>
+                       )}
+                     </div>
                     <Link
                       to="/pedidos"
                       onClick={() => setUserMenuOpen(false)}

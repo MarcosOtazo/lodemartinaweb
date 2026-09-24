@@ -15,6 +15,7 @@ export interface Database {
           email: string;
           full_name: string | null;
           phone: string | null;
+          client_number: number;
           role: 'admin' | 'client';
           created_at: string;
           updated_at: string;
@@ -24,6 +25,7 @@ export interface Database {
           email: string;
           full_name?: string | null;
           phone?: string | null;
+          client_number?: number;
           role?: 'admin' | 'client';
           created_at?: string;
           updated_at?: string;
@@ -33,6 +35,7 @@ export interface Database {
           email?: string;
           full_name?: string | null;
           phone?: string | null;
+          client_number?: number;
           role?: 'admin' | 'client';
           updated_at?: string;
         };
@@ -351,13 +354,14 @@ export interface Database {
           delivery_address?: string | null;
           notes?: string | null;
         };
-        Update: {
-          status?: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
-          payment_method?: 'cash' | 'card' | 'transfer';
-          delivery_address?: string | null;
-          notes?: string | null;
-          updated_at?: string;
-        };
+         Update: {
+           user_id?: string | null;
+           status?: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+           payment_method?: 'cash' | 'card' | 'transfer';
+           delivery_address?: string | null;
+           notes?: string | null;
+           updated_at?: string;
+         };
         Relationships: [];
       };
       site_config: {

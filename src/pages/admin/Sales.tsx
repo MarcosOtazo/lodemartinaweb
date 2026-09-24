@@ -3,7 +3,8 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { fetchCostData } from '../../lib/costs';
 import { useConfigStore } from '../../store/config';
-import type { Order, OrderItem, OrderStatus, Product } from '../../types';
+import { useProductOptions } from '../../hooks/useProductOptions';
+import type { Order, OrderItem, OrderStatus, Product, SelectedOption, User } from '../../types';
 import type { Json } from '../../types/database';
 import {
   commonSchedule,
@@ -35,16 +36,21 @@ export default function AdminSales() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [products, setProducts] = useState<Product[]>([]);
+  const { groups: productOptionGroups } = useProductOptions(products.map((p) => p.id));
+  const [clients, setClients] = useState<User[]>([]);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualName, setManualName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
+  const [manualClientId, setManualClientId] = useState('');
+  const [manualDeliveryType, setManualDeliveryType] = useState<'pickup' | 'delivery'>('pickup');
+  const [manualAddress, setManualAddress] = useState('');
   const [manualPayment, setManualPayment] = useState<'cash' | 'transfer'>('cash');
   const [manualNotes, setManualNotes] = useState('');
   const [manualCashAmount, setManualCashAmount] = useState('');
   const [manualDiscountType, setManualDiscountType] = useState<'amount' | 'percent'>('amount');
   const [manualDiscountValue, setManualDiscountValue] = useState('');
   const [manualItems, setManualItems] = useState<
-    { product_id: string; product_name: string; product_price: number; quantity: number }[]
+    Array<OrderItem & { selected_options: SelectedOption[] }>
   >([]);
   const [manualSaving, setManualSaving] = useState(false);
 
@@ -70,6 +76,13 @@ export default function AdminSales() {
       .eq('is_active', true)
       .order('name')
       .then(({ data }) => setProducts((data || []) as Product[]));
+
+    supabase
+      .from('profiles')
+      .select('*')
+      .neq('role', 'admin')
+      .order('full_name')
+      .then(({ data }) => setClients((data || []) as unknown as User[]));
 
     const channel = supabase
       .channel('admin-sales')
@@ -151,12 +164,17 @@ export default function AdminSales() {
   const openManualModal = () => {
     setManualName('');
     setManualPhone('');
+    setManualClientId('');
+    setManualDeliveryType('pickup');
+    setManualAddress('');
     setManualPayment('cash');
     setManualNotes('');
     setManualCashAmount('');
     setManualDiscountType('amount');
     setManualDiscountValue('');
-    setManualItems([{ product_id: '', product_name: '', product_price: 0, quantity: 1 }]);
+    setManualItems([
+      { product_id: '', product_name: '', product_price: 0, quantity: 1, selected_options: [] },
+    ]);
     setManualOpen(true);
   };
 
@@ -173,7 +191,8 @@ export default function AdminSales() {
   })();
   const manualDiscountPct =
     manualSubtotal > 0 ? (manualDiscountAmount / manualSubtotal) * 100 : 0;
-  const manualTotal = manualSubtotal - manualDiscountAmount;
+  const manualDeliveryFee = manualDeliveryType === 'delivery' ? Number(config.delivery_fee) || 0 : 0;
+  const manualTotal = manualSubtotal - manualDiscountAmount + manualDeliveryFee;
   const manualCashNum = Number(manualCashAmount) || 0;
   const manualChange = manualCashNum - manualTotal;
 
@@ -183,17 +202,42 @@ export default function AdminSales() {
       return;
     }
     const validItems = manualItems.filter((it) => it.product_id && Number(it.quantity) > 0);
-    if (validItems.length === 0) {
-      toast.error('Agregá al menos un producto con cantidad');
-      return;
-    }
-    if (manualPayment === 'cash' && (manualCashNum <= 0 || manualCashNum < manualTotal)) {
+     if (validItems.length === 0) {
+       toast.error('Agregá al menos un producto con cantidad');
+       return;
+     }
+     if (manualDeliveryType === 'delivery' && !manualAddress.trim()) {
+       toast.error('Ingresá la dirección de entrega');
+       return;
+     }
+     for (const item of validItems) {
+       for (const group of productOptionGroups[item.product_id] || []) {
+         const selectedCount = item.selected_options.filter(
+           (option) => option.group_name === group.name
+         ).length;
+         const minimum = group.required ? Math.max(group.min_selections, 1) : group.min_selections;
+         if (selectedCount < minimum) {
+           toast.error(
+             `Seleccioná al menos ${minimum} opción${minimum > 1 ? 'es' : ''} en "${group.name}"`
+           );
+           return;
+         }
+         if (group.multiple && group.max_selections > 0 && selectedCount > group.max_selections) {
+           toast.error(`Máximo ${group.max_selections} opciones en "${group.name}"`);
+           return;
+         }
+       }
+     }
+     if (manualPayment === 'cash' && (manualCashNum <= 0 || manualCashNum < manualTotal)) {
       toast.error('Ingresá con cuánto paga el cliente');
       return;
     }
     setManualSaving(true);
     try {
-      const noteParts = [manualNotes.trim(), 'Pedido cargado en local'];
+       const noteParts = [
+         manualNotes.trim(),
+         `Pedido cargado manualmente - ${manualDeliveryType === 'delivery' ? 'Envío a domicilio' : 'Retiro'}`,
+       ];
       if (manualDiscountAmount > 0) {
         noteParts.push(
           `Descuento: ${formatPrice(manualDiscountAmount)} (${manualDiscountPct.toFixed(1)}%)`
@@ -205,16 +249,17 @@ export default function AdminSales() {
         );
       }
       const { error } = await supabase.from('orders').insert({
-        user_id: null,
-        user_name: manualName.trim(),
-        user_phone: manualPhone.trim() || '—',
-        items: validItems as unknown as Json,
-        subtotal: manualSubtotal,
-        delivery_fee: 0,
-        total: manualTotal,
-        status: 'confirmed',
-        payment_method: manualPayment,
-        notes: noteParts.filter(Boolean).join(' | '),
+         user_id: manualClientId || null,
+         user_name: manualName.trim(),
+         user_phone: manualPhone.trim() || '—',
+         items: validItems as unknown as Json,
+         subtotal: manualSubtotal,
+         delivery_fee: manualDeliveryFee,
+         total: manualTotal,
+         status: 'confirmed',
+         payment_method: manualPayment,
+         delivery_address: manualDeliveryType === 'delivery' ? manualAddress.trim() : null,
+         notes: noteParts.filter(Boolean).join(' | '),
       });
       if (error) throw error;
       toast.success('Pedido cargado');
@@ -541,9 +586,86 @@ export default function AdminSales() {
                   {commonSchedule(config.opening_hours) ? ` (${commonSchedule(config.opening_hours)})` : ''}.
                   Como admin podés cargarlo igual.
                 </div>
-              )}
+               )}
 
-              <div className="grid grid-cols-2 gap-4">
+               <div>
+                 <label className="label">Cliente registrado (opcional)</label>
+                 <select
+                   className="input"
+                   value={manualClientId}
+                   onChange={(e) => {
+                     const clientId = e.target.value;
+                     const client = clients.find((c) => c.id === clientId);
+                     setManualClientId(clientId);
+                     if (client) {
+                       setManualName(client.full_name || '');
+                       setManualPhone(client.phone || '');
+                     }
+                   }}
+                 >
+                   <option value="">Pedido sin cliente registrado</option>
+                   {clients.map((client) => (
+                     <option key={client.id} value={client.id}>
+                       {client.client_number ? `N.º ${client.client_number} · ` : ''}
+                       {client.full_name || client.email}
+                     </option>
+                   ))}
+                 </select>
+                 {manualClientId && clients.find((c) => c.id === manualClientId) && (
+                   <p className="text-xs text-green-700 mt-1">
+                     Se asociará a la cuenta del cliente y aparecerá en su historial.
+                   </p>
+                 )}
+               </div>
+
+               <div>
+                 <label className="label">Entrega</label>
+                 <div className="grid grid-cols-2 gap-3">
+                   <button
+                     type="button"
+                     onClick={() => setManualDeliveryType('pickup')}
+                     className={cn(
+                       'p-3 rounded-xl border-2 text-center',
+                       manualDeliveryType === 'pickup'
+                         ? 'border-primary bg-primary-light'
+                         : 'border-gray-200'
+                     )}
+                   >
+                     🏪 Retiro
+                   </button>
+                   <button
+                     type="button"
+                     onClick={() => setManualDeliveryType('delivery')}
+                     className={cn(
+                       'p-3 rounded-xl border-2 text-center',
+                       manualDeliveryType === 'delivery'
+                         ? 'border-primary bg-primary-light'
+                         : 'border-gray-200'
+                     )}
+                   >
+                     🛵 Envío a domicilio
+                   </button>
+                 </div>
+                 {manualDeliveryType === 'delivery' && (
+                   <div className="mt-3 space-y-2">
+                     <div>
+                       <label className="label" htmlFor="manualAddress">Dirección de entrega</label>
+                       <input
+                         id="manualAddress"
+                         className="input"
+                         value={manualAddress}
+                         onChange={(e) => setManualAddress(e.target.value)}
+                         placeholder="Calle, número, piso, referencias..."
+                       />
+                     </div>
+                     <p className="text-xs text-gray-500">
+                       El valor del envío puede variar según la zona y las condiciones del día.
+                     </p>
+                   </div>
+                 )}
+               </div>
+
+               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label">Nombre del cliente *</label>
                   <input
@@ -567,62 +689,132 @@ export default function AdminSales() {
               <div>
                 <label className="label">Productos</label>
                 <div className="space-y-2">
-                  {manualItems.map((item, ii) => (
-                    <div key={ii} className="flex items-center gap-2">
-                      <select
-                        className="input flex-1 min-w-[150px]"
-                        value={item.product_id}
-                        onChange={(e) => {
-                          const prod = products.find((p) => p.id === e.target.value);
-                          const next = [...manualItems];
-                          next[ii] = {
-                            ...item,
-                            product_id: e.target.value,
-                            product_name: prod ? prod.name : '',
-                            product_price: prod ? Number(prod.price) : 0,
-                          };
-                          setManualItems(next);
-                        }}
-                      >
-                        <option value="">Elegí un producto...</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({formatPrice(p.price)})
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        className="input w-20"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const next = [...manualItems];
-                          next[ii] = { ...item, quantity: Number(e.target.value) };
-                          setManualItems(next);
-                        }}
-                        placeholder="Cant."
-                      />
-                      <span className="text-sm font-semibold text-gray-600 w-24 text-right shrink-0">
-                        {item.product_id ? formatPrice(Number(item.product_price) * Number(item.quantity || 0)) : ''}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setManualItems(manualItems.filter((_, i) => i !== ii))}
-                        className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 shrink-0"
-                        aria-label="Quitar producto"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
+                  {manualItems.map((item, ii) => {
+                    const groups = item.product_id ? productOptionGroups[item.product_id] || [] : [];
+                    return (
+                      <div key={ii} className="rounded-lg border border-gray-200 p-3 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <select
+                            className="input flex-1 min-w-[150px]"
+                            value={item.product_id}
+                            onChange={(e) => {
+                              const prod = products.find((p) => p.id === e.target.value);
+                              const next = [...manualItems];
+                              next[ii] = {
+                                ...item,
+                                product_id: e.target.value,
+                                product_name: prod ? prod.name : '',
+                                product_price: prod ? Number(prod.price) : 0,
+                                selected_options: [],
+                              };
+                              setManualItems(next);
+                            }}
+                          >
+                            <option value="">Elegí un producto...</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({formatPrice(p.price)})
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            className="input w-20"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const next = [...manualItems];
+                              next[ii] = { ...item, quantity: Number(e.target.value) };
+                              setManualItems(next);
+                            }}
+                            placeholder="Cant."
+                          />
+                          <span className="text-sm font-semibold text-gray-600 w-24 text-right shrink-0">
+                            {item.product_id
+                              ? formatPrice(Number(item.product_price) * Number(item.quantity || 0))
+                              : ''}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setManualItems(manualItems.filter((_, i) => i !== ii))}
+                            className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 shrink-0"
+                            aria-label="Quitar producto"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                        {groups.map((group) => {
+                          const selectedInGroup = item.selected_options.filter(
+                            (option) => option.group_name === group.name
+                          );
+                          return (
+                            <div key={group.id} className="space-y-2 border-t border-gray-100 pt-3">
+                              <p className="text-xs font-semibold text-gray-600">
+                                {group.name}
+                                {group.required ? ' *' : ''}
+                                {group.multiple ? ' · puede elegir varias' : ''}
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {group.items.map((option) => {
+                                  const checked = selectedInGroup.some(
+                                    (selected) => selected.item_name === option.name
+                                  );
+                                  return (
+                                    <label key={option.id} className="flex items-center gap-2 text-sm">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => {
+                                          const nextOptions = item.selected_options.filter(
+                                            (selected) => selected.group_name !== group.name
+                                          );
+                                          if (!checked) {
+                                            nextOptions.push({
+                                              group_name: group.name,
+                                              item_name: option.name,
+                                              price: Number(option.price || 0),
+                                            });
+                                          }
+                                          const optionPrice = nextOptions.reduce(
+                                            (sum, selected) => sum + Number(selected.price || 0),
+                                            0
+                                          );
+                                          const baseProduct = products.find(
+                                            (product) => product.id === item.product_id
+                                          );
+                                          const next = [...manualItems];
+                                          next[ii] = {
+                                            ...item,
+                                            selected_options: nextOptions,
+                                            product_price:
+                                              Number(baseProduct?.price || 0) + optionPrice,
+                                          };
+                                          setManualItems(next);
+                                        }}
+                                      />
+                                      <span>{option.name}</span>
+                                      {Number(option.price) > 0 && (
+                                        <span className="text-xs text-gray-500">
+                                          +{formatPrice(option.price)}
+                                        </span>
+                                      )}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                   <button
                     type="button"
                     onClick={() =>
                       setManualItems([
                         ...manualItems,
-                        { product_id: '', product_name: '', product_price: 0, quantity: 1 },
+                         { product_id: '', product_name: '', product_price: 0, quantity: 1, selected_options: [] },
                       ])
                     }
                     className="text-sm text-primary font-semibold hover:underline"
@@ -692,7 +884,13 @@ export default function AdminSales() {
                   />
                 </div>
                 <div>
-                  {manualDiscountAmount > 0 && (
+                  {manualDeliveryFee > 0 && (
+                   <div className="flex justify-between">
+                     <span className="text-gray-600">Envío</span>
+                     <span className="font-semibold">{formatPrice(manualDeliveryFee)}</span>
+                   </div>
+                 )}
+                 {manualDiscountAmount > 0 && (
                     <p className="text-sm text-gray-600">
                       -{formatPrice(manualDiscountAmount)}{' '}
                       <span className="font-semibold text-primary">
