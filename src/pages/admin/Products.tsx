@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useConfigStore } from '../../store/config';
 import type { Category, Insumo, Product, ProductCategory, Receta } from '../../types';
-import { formatPrice, cn, compatibleUnits, toBaseQuantity, fromBaseQuantity, unitCostOf } from '../../lib/utils';
+import { formatPrice, cn, compatibleUnits, toBaseQuantity, fromBaseQuantity, unitCostOf, validateImageFile } from '../../lib/utils';
 import { Plus, Pencil, Trash2, X, Search, Tags, ChefHat, Wallet, Copy, Package } from 'lucide-react';
 
 type OptionItemDraft = {
@@ -706,6 +706,11 @@ export default function AdminProducts() {
       let imageUrl = editing.image_url;
 
       if (imageFile) {
+        const imageError = validateImageFile(imageFile);
+        if (imageError) {
+          toast.error(imageError);
+          return;
+        }
         if (editing.image_url) {
           const oldPath = editing.image_url.split('/').pop();
           if (oldPath) await supabase.storage.from('product-images').remove([oldPath]);
@@ -956,6 +961,11 @@ export default function AdminProducts() {
   };
 
   const uploadCategoryImage = async (cat: Category, file: File) => {
+    const imageError = validateImageFile(file);
+    if (imageError) {
+      toast.error(imageError);
+      return;
+    }
     try {
       if (cat.image_url) {
         const oldPath = cat.image_url.split('/').pop();

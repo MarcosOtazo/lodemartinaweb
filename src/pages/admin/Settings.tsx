@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useConfigStore } from '../../store/config';
 import type { SiteConfig } from '../../types';
-import { cn, DAY_KEYS, DAY_LABELS, groupSchedule } from '../../lib/utils';
+import { cn, DAY_KEYS, DAY_LABELS, groupSchedule, validateImageFile } from '../../lib/utils';
 
 export default function AdminSettings() {
   const { config, updateConfig } = useConfigStore();
@@ -20,6 +20,16 @@ export default function AdminSettings() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    for (const file of [logoFile, heroFile, footerFile]) {
+      if (!file) continue;
+      const imageError = validateImageFile(file);
+      if (imageError) {
+        toast.error(imageError);
+        return;
+      }
+    }
+
     setSaving(true);
 
     try {

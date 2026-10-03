@@ -26,6 +26,8 @@ alter table public.profiles
 create or replace function public.assign_random_client_number()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 declare
   candidate bigint;

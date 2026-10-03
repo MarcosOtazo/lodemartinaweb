@@ -10,6 +10,33 @@ export function formatPrice(price: number): string {
   return `$${price.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+export function validateImageFile(file: File): string | null {
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return 'Formato no permitido. Usá JPG, PNG o WebP.';
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    return 'La imagen no puede superar los 5 MB.';
+  }
+  return null;
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function sanitizeCsvCell(value: unknown): string {
+  const text = String(value ?? '');
+  return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+}
+
 export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   hamburguesas: 'Hamburguesas',
   tostadas: 'Tostadas',
@@ -283,7 +310,7 @@ export function exportOrdersCSV(orders: Order[]) {
     ];
   });
   const csv = [header, ...rows]
-    .map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(','))
+    .map((r) => r.map((c) => `"${sanitizeCsvCell(c).replaceAll('"', '""')}"`).join(','))
     .join('\r\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -301,19 +328,20 @@ export function printOrderTicket(order: Order) {
       (it) => `
       <div class="item">
         <div>
-          <strong>${it.quantity}x ${it.product_name}</strong>
+          <strong>${escapeHtml(it.quantity)}x ${escapeHtml(it.product_name)}</strong>
           ${(it.selected_options || [])
-            .map((opt) => `<div class="opt">· ${opt.item_name}${opt.price > 0 ? ` (+$${opt.price})` : ''}</div>`)
+            .map((opt) => `<div class="opt">· ${escapeHtml(opt.item_name)}${opt.price > 0 ? ` (+${escapeHtml(formatPrice(opt.price))})` : ''}</div>`)
             .join('')}
-          ${it.notes ? `<div class="opt">Nota: ${it.notes}</div>` : ''}
+          ${it.notes ? `<div class="opt">Nota: ${escapeHtml(it.notes)}</div>` : ''}
         </div>
-        <span>$${Number(it.product_price * it.quantity).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
+        <span>${escapeHtml(formatPrice(Number(it.product_price) * Number(it.quantity)))}</span>
       </div>`
     )
     .join('');
 
   const w = window.open('', '_blank', 'width=360,height=640');
   if (!w) return;
+  w.opener = null;
   w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Comanda ${order.id.slice(0, 8).toUpperCase()}</title>
   <style>
     body { font-family: 'Courier New', monospace; font-size: 13px; padding: 16px; color: #000; }
@@ -330,13 +358,13 @@ export function printOrderTicket(order: Order) {
     <hr>
     ${rows}
     <hr>
-    <div class="total"><span>TOTAL</span><span>$${Number(order.total).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span></div>
+    <div class="total"><span>TOTAL</span><span>${escapeHtml(formatPrice(Number(order.total)))}</span></div>
     <div class="info">
-      Cliente: ${order.user_name}<br>
-      Tel: ${order.user_phone}<br>
-      Pago: ${PAYMENT_METHODS[order.payment_method] || order.payment_method}<br>
-      ${order.delivery_address ? `Dirección: ${order.delivery_address}<br>` : ''}
-      ${order.notes ? `Notas: ${order.notes}` : ''}
+      Cliente: ${escapeHtml(order.user_name)}<br>
+      Tel: ${escapeHtml(order.user_phone)}<br>
+      Pago: ${escapeHtml(PAYMENT_METHODS[order.payment_method] || order.payment_method)}<br>
+      ${order.delivery_address ? `Dirección: ${escapeHtml(order.delivery_address)}<br>` : ''}
+      ${order.notes ? `Notas: ${escapeHtml(order.notes)}` : ''}
     </div>
   </body></html>`);
   w.document.close();
