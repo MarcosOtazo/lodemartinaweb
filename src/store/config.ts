@@ -20,6 +20,7 @@ const DEFAULT_CONFIG: SiteConfig = {
   instagram_url: '',
   hero_image_url: null,
   about_text: '',
+  testimonials: [],
   footer_pattern_url: null,
   delivery_fee: 0,
   min_order_amount: 0,
@@ -41,6 +42,9 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
     const { data } = await supabase.from('site_config').select('*').eq('id', 1).single();
     if (data) {
       const storedHours = data.opening_hours as unknown as Record<string, { open: string; close: string; closed: boolean }> | null;
+      const storedTestimonials = Array.isArray(data.testimonials)
+        ? (data.testimonials as unknown[]).filter((url): url is string => typeof url === 'string')
+        : [];
       set({
         config: {
           ...get().config,
@@ -51,6 +55,7 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
           instagram_url: data.instagram_url || '',
           hero_image_url: data.hero_image_url ?? null,
           about_text: data.about_text || '',
+          testimonials: storedTestimonials,
           footer_pattern_url: data.footer_pattern_url ?? null,
           opening_hours:
             storedHours && Object.keys(storedHours).length > 0
@@ -76,6 +81,7 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
       instagram_url: updates.instagram_url,
       hero_image_url: updates.hero_image_url,
       about_text: updates.about_text,
+      testimonials: updates.testimonials as unknown as Json,
       footer_pattern_url: updates.footer_pattern_url,
       delivery_fee: updates.delivery_fee,
       min_order_amount: updates.min_order_amount,

@@ -380,6 +380,7 @@ export interface Database {
           instagram_url: string | null;
           hero_image_url: string | null;
           about_text: string | null;
+          testimonials: Json;
           delivery_fee: number;
           min_order_amount: number;
           is_open: boolean;
@@ -402,6 +403,7 @@ export interface Database {
           instagram_url?: string | null;
           hero_image_url?: string | null;
           about_text?: string | null;
+          testimonials?: Json;
           delivery_fee?: number;
           min_order_amount?: number;
           is_open?: boolean;
@@ -421,6 +423,7 @@ export interface Database {
           instagram_url?: string | null;
           hero_image_url?: string | null;
           about_text?: string | null;
+          testimonials?: Json;
           delivery_fee?: number;
           min_order_amount?: number;
           is_open?: boolean;

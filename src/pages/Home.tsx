@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -32,6 +32,108 @@ export default function Home() {
 
   const isOpen = computeIsOpen(config.opening_hours);
   const commonHours = commonSchedule(config.opening_hours);
+
+  const slideCount = config.testimonials.length;
+  const loopItems =
+    slideCount > 1
+      ? [...config.testimonials, ...config.testimonials, ...config.testimonials]
+      : config.testimonials;
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const scrollTicking = useRef(false);
+  const activeSlideRef = useRef(0);
+  const autoPaused = useRef(false);
+  const resumeTimer = useRef<number | null>(null);
+  const wrapTimer = useRef<number | null>(null);
+  const [activeSlide, setActiveSlide] = useState(0);
+
+  const pauseAuto = () => {
+    autoPaused.current = true;
+    if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
+    resumeTimer.current = window.setTimeout(() => {
+      autoPaused.current = false;
+    }, 8000);
+  };
+
+  useEffect(() => {
+    const el = carouselRef.current;
+    if (!el || slideCount < 2) return;
+    const first = el.children[0] as HTMLElement | undefined;
+    const target = el.children[slideCount] as HTMLElement | undefined;
+    const setWidth = first && target ? target.offsetLeft - first.offsetLeft : el.scrollWidth / 3;
+    const frame = requestAnimationFrame(() => {
+      el.scrollLeft = setWidth;
+      activeSlideRef.current = slideCount;
+      setActiveSlide(slideCount);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [slideCount]);
+
+  useEffect(() => {
+    if (slideCount < 2) return;
+    const timer = window.setInterval(() => {
+      if (autoPaused.current) return;
+      const el = carouselRef.current;
+      if (!el) return;
+      const next = el.children[activeSlideRef.current + 1] as HTMLElement | undefined;
+      if (!next) return;
+      const left = next.offsetLeft - (el.clientWidth - next.clientWidth) / 2;
+      el.scrollTo({ left, behavior: 'smooth' });
+    }, 4500);
+    return () => window.clearInterval(timer);
+  }, [slideCount]);
+
+  useEffect(() => {
+    return () => {
+      if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
+      if (wrapTimer.current) window.clearTimeout(wrapTimer.current);
+    };
+  }, []);
+
+  const handleCarouselScroll = () => {
+    if (scrollTicking.current) return;
+    scrollTicking.current = true;
+    requestAnimationFrame(() => {
+      const el = carouselRef.current;
+      if (el && slideCount > 1) {
+        const first = el.children[0] as HTMLElement | undefined;
+        const target = el.children[slideCount] as HTMLElement | undefined;
+        const setWidth = first && target ? target.offsetLeft - first.offsetLeft : el.scrollWidth / 3;
+
+        if (setWidth > 0) {
+          if (wrapTimer.current) window.clearTimeout(wrapTimer.current);
+          wrapTimer.current = window.setTimeout(() => {
+            const container = carouselRef.current;
+            if (!container) return;
+            const firstChild = container.children[0] as HTMLElement | undefined;
+            const targetChild = container.children[slideCount] as HTMLElement | undefined;
+            const width =
+              firstChild && targetChild
+                ? targetChild.offsetLeft - firstChild.offsetLeft
+                : container.scrollWidth / 3;
+            if (width <= 0) return;
+            if (container.scrollLeft < width * 0.5) container.scrollLeft += width;
+            else if (container.scrollLeft > width * 1.5) container.scrollLeft -= width;
+          }, 160);
+        }
+
+        const rect = el.getBoundingClientRect();
+        const center = rect.left + rect.width / 2;
+        let closest = 0;
+        let closestDist = Infinity;
+        Array.from(el.children).forEach((child, index) => {
+          const childRect = (child as HTMLElement).getBoundingClientRect();
+          const dist = Math.abs(childRect.left + childRect.width / 2 - center);
+          if (dist < closestDist) {
+            closestDist = dist;
+            closest = index;
+          }
+        });
+        activeSlideRef.current = closest;
+        setActiveSlide(closest);
+      }
+      scrollTicking.current = false;
+    });
+  };
 
   return (
     <div className="container-main py-4 sm:py-6">
@@ -168,6 +270,55 @@ export default function Home() {
             Pedir por WhatsApp 🟢
           </a>
         </div>
+      )}
+
+      {/* Recomendaciones */}
+      {config.testimonials.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">
+            Nuestros clientes nos recomiendan
+          </h2>
+          <p className="text-sm text-gray-500 mb-3">
+            Historias y recomendaciones reales de nuestra gente
+          </p>
+          <div className="relative">
+            <div
+              ref={carouselRef}
+              onScroll={handleCarouselScroll}
+              onPointerDown={pauseAuto}
+              onWheel={pauseAuto}
+              onMouseEnter={() => {
+                autoPaused.current = true;
+              }}
+              onMouseLeave={() => {
+                autoPaused.current = false;
+              }}
+              className="-mx-4 px-4 flex gap-3 overflow-x-auto snap-x snap-mandatory pb-3 scrollbar-hide"
+            >
+              {loopItems.map((url, index) => {
+                const distance = Math.abs(index - activeSlide);
+                return (
+                  <div
+                    key={`${url}-${index}`}
+                    className={cn(
+                      'relative snap-center shrink-0 w-40 sm:w-48 aspect-[9/16] rounded-2xl overflow-hidden bg-gray-100 transition-all duration-300 ease-out',
+                      distance === 0 && 'z-10 scale-105 shadow-xl opacity-100',
+                      distance === 1 && 'scale-95 opacity-80 blur-[1px]',
+                      distance >= 2 && 'scale-90 opacity-50 blur-[2px]'
+                    )}
+                  >
+                    <img
+                      src={url}
+                      alt={`Recomendación ${(index % slideCount) + 1}`}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
       )}
     </div>
   );

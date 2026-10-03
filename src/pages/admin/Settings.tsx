@@ -13,6 +13,7 @@ export default function AdminSettings() {
   const [footerFile, setFooterFile] = useState<File | null>(null);
   const [footerRemoved, setFooterRemoved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingTestimonial, setUploadingTestimonial] = useState(false);
 
   useEffect(() => {
     setForm(config);
@@ -127,6 +128,66 @@ export default function AdminSettings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAddTestimonials = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadingTestimonial(true);
+    try {
+      const uploaded: string[] = [];
+      for (const file of Array.from(files)) {
+        const imageError = validateImageFile(file);
+        if (imageError) {
+          toast.error(`${file.name}: ${imageError}`);
+          continue;
+        }
+        const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const fileName = `reco-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+        const { error } = await supabase.storage.from('product-images').upload(fileName, file);
+        if (error) {
+          toast.error(`No se pudo subir ${file.name}`);
+          continue;
+        }
+        const { data } = supabase.storage.from('product-images').getPublicUrl(fileName);
+        uploaded.push(data.publicUrl);
+      }
+
+      if (uploaded.length === 0) return;
+      const { error } = await updateConfig({ testimonials: [...form.testimonials, ...uploaded] });
+      if (error) {
+        toast.error('No se pudieron guardar las recomendaciones');
+        return;
+      }
+      toast.success(uploaded.length === 1 ? 'Foto agregada' : `${uploaded.length} fotos agregadas`);
+    } finally {
+      setUploadingTestimonial(false);
+    }
+  };
+
+  const removeTestimonial = async (url: string) => {
+    if (!confirm('¿Quitar esta foto de recomendaciones?')) return;
+    const next = form.testimonials.filter((item) => item !== url);
+    const { error } = await updateConfig({ testimonials: next });
+    if (error) {
+      toast.error('No se pudo quitar la foto');
+      return;
+    }
+    const path = url.split('/').pop();
+    if (path) await supabase.storage.from('product-images').remove([path]);
+    toast.success('Foto quitada');
+  };
+
+  const moveTestimonial = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= form.testimonials.length) return;
+    const next = [...form.testimonials];
+    [next[index], next[target]] = [next[target], next[index]];
+    const { error } = await updateConfig({ testimonials: next });
+    if (error) {
+      toast.error('No se pudo cambiar el orden');
+      return;
+    }
+    toast.success('Orden actualizado');
   };
 
   const inputClass = 'input';
@@ -257,6 +318,77 @@ export default function AdminSettings() {
           <p className="text-xs text-gray-400 mt-2">
             Si dejás un campo vacío, ese botón no se muestra en el footer.
           </p>
+        </div>
+
+        {/* Recomendaciones */}
+        <div className="card p-6">
+          <h2 className="text-lg font-bold mb-1">Nuestros clientes nos recomiendan</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Subí capturas de historias de Instagram. Se muestran como carrusel en el inicio,
+            en formato vertical 9:16.
+          </p>
+          <label className="btn-secondary cursor-pointer">
+            {uploadingTestimonial ? 'Subiendo...' : 'Subir fotos'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              className="hidden"
+              disabled={uploadingTestimonial}
+              onChange={(e) => {
+                handleAddTestimonials(e.target.files);
+                e.currentTarget.value = '';
+              }}
+            />
+          </label>
+
+          {form.testimonials.length > 0 ? (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-4">
+              {form.testimonials.map((url, index) => (
+                <div key={url} className="relative">
+                  <div className="aspect-[9/16] rounded-xl overflow-hidden border border-gray-200 bg-gray-100">
+                    <img
+                      src={url}
+                      alt={`Recomendación ${index + 1}`}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeTestimonial(url)}
+                    className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white text-sm hover:bg-red-600"
+                    aria-label="Quitar foto"
+                    title="Quitar foto"
+                  >
+                    ×
+                  </button>
+                  <div className="flex justify-between gap-1 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => moveTestimonial(index, -1)}
+                      disabled={index === 0}
+                      className="flex-1 rounded-md bg-gray-100 text-gray-600 text-sm py-1 disabled:opacity-40"
+                      aria-label="Mover a la izquierda"
+                    >
+                      ←
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveTestimonial(index, 1)}
+                      disabled={index === form.testimonials.length - 1}
+                      className="flex-1 rounded-md bg-gray-100 text-gray-600 text-sm py-1 disabled:opacity-40"
+                      aria-label="Mover a la derecha"
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 mt-3">Todavía no subiste fotos.</p>
+          )}
         </div>
 
         {/* Fondo del footer */}

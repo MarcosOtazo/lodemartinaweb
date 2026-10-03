@@ -108,6 +108,7 @@ export interface SiteConfig {
   instagram_url: string;
   hero_image_url: string | null;
   about_text: string;
+  testimonials: string[];
   footer_pattern_url: string | null;
   delivery_fee: number;
   min_order_amount: number;
