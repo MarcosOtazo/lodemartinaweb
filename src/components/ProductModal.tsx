@@ -9,10 +9,18 @@ import { formatPrice, cn } from '../lib/utils';
 interface ProductModalProps {
   product: Product | null;
   optionGroups: ProductOptionGroup[];
+  optionsLoading?: boolean;
+  optionsError?: string | null;
   onClose: () => void;
 }
 
-export default function ProductModal({ product, optionGroups, onClose }: ProductModalProps) {
+export default function ProductModal({
+  product,
+  optionGroups,
+  optionsLoading = false,
+  optionsError = null,
+  onClose,
+}: ProductModalProps) {
   const [quantity, setQuantity] = useState(1);
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [notes, setNotes] = useState('');
@@ -52,6 +60,14 @@ export default function ProductModal({ product, optionGroups, onClose }: Product
   };
 
   const handleAdd = () => {
+    if (optionsLoading) {
+      toast.error('Esperá un momento, estamos cargando las opciones');
+      return;
+    }
+    if (optionsError) {
+      toast.error('No se pudieron cargar las opciones. Cerrá y volvé a intentar.');
+      return;
+    }
     const selectedOptions: SelectedOption[] = [];
     for (const group of optionGroups) {
       const ids = selected[group.id] || [];
@@ -108,6 +124,11 @@ export default function ProductModal({ product, optionGroups, onClose }: Product
           <h2 className="text-2xl font-bold text-gray-900">{product.name}</h2>
           {product.description && (
             <p className="text-gray-500 mt-1 text-sm leading-relaxed">{product.description}</p>
+          )}
+          {optionsError && (
+            <p className="mt-3 text-sm text-red-600 bg-red-50 rounded-lg p-3">
+              No pudimos cargar las opciones de este producto. Cerrá y volvé a intentar.
+            </p>
           )}
 
           {/* Grupos de opciones */}
@@ -194,8 +215,16 @@ export default function ProductModal({ product, optionGroups, onClose }: Product
               <Plus className="h-4 w-4" />
             </button>
           </div>
-          <button onClick={handleAdd} className="btn-primary flex-1 py-3 text-base">
-            Agregar · {formatPrice(total)}
+          <button
+            onClick={handleAdd}
+            disabled={optionsLoading || !!optionsError}
+            className="btn-primary flex-1 py-3 text-base"
+          >
+            {optionsLoading
+              ? 'Cargando opciones...'
+              : optionsError
+                ? 'Opciones no disponibles'
+                : `Agregar · ${formatPrice(total)}`}
           </button>
         </div>
       </div>

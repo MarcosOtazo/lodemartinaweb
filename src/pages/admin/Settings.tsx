@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useConfigStore } from '../../store/config';
@@ -14,10 +14,42 @@ export default function AdminSettings() {
   const [footerRemoved, setFooterRemoved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingTestimonial, setUploadingTestimonial] = useState(false);
+  const configLoaded = useRef(false);
 
   useEffect(() => {
+    if (configLoaded.current || !config.created_at) return;
     setForm(config);
+    configLoaded.current = true;
   }, [config]);
+
+  const logoPreview = useMemo(
+    () => (logoFile ? URL.createObjectURL(logoFile) : null),
+    [logoFile]
+  );
+  const heroPreview = useMemo(
+    () => (heroFile ? URL.createObjectURL(heroFile) : null),
+    [heroFile]
+  );
+  const footerPreview = useMemo(
+    () => (footerFile ? URL.createObjectURL(footerFile) : null),
+    [footerFile]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+    };
+  }, [logoPreview]);
+  useEffect(() => {
+    return () => {
+      if (heroPreview) URL.revokeObjectURL(heroPreview);
+    };
+  }, [heroPreview]);
+  useEffect(() => {
+    return () => {
+      if (footerPreview) URL.revokeObjectURL(footerPreview);
+    };
+  }, [footerPreview]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,16 +63,18 @@ export default function AdminSettings() {
       }
     }
 
+    if (!/^#[0-9a-fA-F]{6}$/.test(form.primary_color) || !/^#[0-9a-fA-F]{6}$/.test(form.secondary_color)) {
+      toast.error('Los colores deben tener formato hexadecimal, por ejemplo #e85d04');
+      return;
+    }
+
     setSaving(true);
 
     try {
+      const oldPathsToRemove: string[] = [];
       let logoUrl = form.logo_url;
 
       if (logoFile) {
-        if (form.logo_url) {
-          const oldPath = form.logo_url.split('/').pop();
-          if (oldPath) await supabase.storage.from('product-images').remove([oldPath]);
-        }
         const fileExt = logoFile.name.split('.').pop();
         const fileName = `logo-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
@@ -51,6 +85,10 @@ export default function AdminSettings() {
           .from('product-images')
           .getPublicUrl(fileName);
         logoUrl = publicUrl.publicUrl;
+        if (form.logo_url) {
+          const oldPath = form.logo_url.split('/').pop();
+          if (oldPath) oldPathsToRemove.push(oldPath);
+        }
       }
 
       let footerUrl = form.footer_pattern_url;
@@ -58,14 +96,10 @@ export default function AdminSettings() {
       if (footerRemoved) {
         if (footerUrl) {
           const oldPath = footerUrl.split('/').pop();
-          if (oldPath) await supabase.storage.from('product-images').remove([oldPath]);
+          if (oldPath) oldPathsToRemove.push(oldPath);
         }
         footerUrl = null;
       } else if (footerFile) {
-        if (footerUrl) {
-          const oldPath = footerUrl.split('/').pop();
-          if (oldPath) await supabase.storage.from('product-images').remove([oldPath]);
-        }
         const fileExt = footerFile.name.split('.').pop();
         const fileName = `footer-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
@@ -76,15 +110,15 @@ export default function AdminSettings() {
           .from('product-images')
           .getPublicUrl(fileName);
         footerUrl = publicUrl.publicUrl;
+        if (form.footer_pattern_url) {
+          const oldPath = form.footer_pattern_url.split('/').pop();
+          if (oldPath) oldPathsToRemove.push(oldPath);
+        }
       }
 
       let heroUrl = form.hero_image_url;
 
       if (heroFile) {
-        if (heroUrl) {
-          const oldPath = heroUrl.split('/').pop();
-          if (oldPath) await supabase.storage.from('product-images').remove([oldPath]);
-        }
         const fileExt = heroFile.name.split('.').pop();
         const fileName = `hero-${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
@@ -95,6 +129,10 @@ export default function AdminSettings() {
           .from('product-images')
           .getPublicUrl(fileName);
         heroUrl = publicUrl.publicUrl;
+        if (form.hero_image_url) {
+          const oldPath = form.hero_image_url.split('/').pop();
+          if (oldPath) oldPathsToRemove.push(oldPath);
+        }
       }
 
       const { error } = await updateConfig({
@@ -117,6 +155,15 @@ export default function AdminSettings() {
       });
 
       if (error) throw new Error(error);
+      setForm((prev) => ({
+        ...prev,
+        logo_url: logoUrl,
+        hero_image_url: heroUrl,
+        footer_pattern_url: footerUrl,
+      }));
+      if (oldPathsToRemove.length > 0) {
+        await supabase.storage.from('product-images').remove(oldPathsToRemove);
+      }
       toast.success('Configuración guardada');
       setLogoFile(null);
       setHeroFile(null);
@@ -153,11 +200,13 @@ export default function AdminSettings() {
       }
 
       if (uploaded.length === 0) return;
-      const { error } = await updateConfig({ testimonials: [...form.testimonials, ...uploaded] });
+      const next = [...form.testimonials, ...uploaded];
+      const { error } = await updateConfig({ testimonials: next });
       if (error) {
         toast.error('No se pudieron guardar las recomendaciones');
         return;
       }
+      setForm((prev) => ({ ...prev, testimonials: next }));
       toast.success(uploaded.length === 1 ? 'Foto agregada' : `${uploaded.length} fotos agregadas`);
     } finally {
       setUploadingTestimonial(false);
@@ -172,6 +221,7 @@ export default function AdminSettings() {
       toast.error('No se pudo quitar la foto');
       return;
     }
+    setForm((prev) => ({ ...prev, testimonials: next }));
     const path = url.split('/').pop();
     if (path) await supabase.storage.from('product-images').remove([path]);
     toast.success('Foto quitada');
@@ -187,6 +237,7 @@ export default function AdminSettings() {
       toast.error('No se pudo cambiar el orden');
       return;
     }
+    setForm((prev) => ({ ...prev, testimonials: next }));
     toast.success('Orden actualizado');
   };
 
@@ -216,7 +267,7 @@ export default function AdminSettings() {
               <div className="flex items-center gap-4">
                 {(logoFile || form.logo_url) && (
                   <img
-                    src={logoFile ? URL.createObjectURL(logoFile) : form.logo_url!}
+                    src={logoPreview || form.logo_url!}
                     alt="Logo"
                     className="h-16 w-16 rounded-full object-cover border border-gray-200"
                   />
@@ -260,7 +311,7 @@ export default function AdminSettings() {
               <div className="flex items-center gap-4 flex-wrap">
                 {(heroFile || form.hero_image_url) && (
                   <img
-                    src={heroFile ? URL.createObjectURL(heroFile) : form.hero_image_url!}
+                    src={heroPreview || form.hero_image_url!}
                     alt="Imagen principal"
                     className="h-20 w-full max-w-[200px] rounded-lg object-cover border border-gray-200"
                   />
@@ -397,7 +448,7 @@ export default function AdminSettings() {
           <div className="flex items-center gap-4 flex-wrap">
             {(footerFile || (!footerRemoved && form.footer_pattern_url)) && (
               <img
-                src={footerFile ? URL.createObjectURL(footerFile) : form.footer_pattern_url!}
+                src={footerPreview || form.footer_pattern_url!}
                 alt="Patrón del footer"
                 className="h-24 w-24 rounded-lg object-cover border border-gray-200"
               />

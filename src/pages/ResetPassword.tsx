@@ -16,15 +16,26 @@ export default function ResetPassword() {
 
   useEffect(() => {
     let cancelled = false;
-    supabase.auth.getSession().then(({ data }) => {
+    const recoveryInUrl =
+      window.location.hash.includes('type=recovery') ||
+      window.location.search.includes('type=recovery');
+
+    supabase.auth.getSession().then(() => {
       if (!cancelled) {
-        setHasRecoverySession(!!data.session);
+        setHasRecoverySession(recoveryInUrl);
         setChecking(false);
       }
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) setHasRecoverySession(true);
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setHasRecoverySession(true);
+        setChecking(false);
+      } else if (event === 'SIGNED_OUT') {
+        setHasRecoverySession(false);
+      }
     });
+
     return () => {
       cancelled = true;
       listener.subscription.unsubscribe();

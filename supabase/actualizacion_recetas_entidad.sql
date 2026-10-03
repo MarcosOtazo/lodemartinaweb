@@ -2,6 +2,7 @@
 -- LO DE MARTINA - Actualizacion: recetas como entidad propia
 -- Creas recetas (nombre + insumos) y despues se las asignas
 -- a cada producto. Reemplaza la version anterior (por producto).
+-- ⚠️ NO REEJECUTAR: borra recetas, ingredientes y asociaciones existentes.
 -- Ejecutar en Supabase: SQL Editor -> New query -> pegar -> Run
 -- ============================================================
 

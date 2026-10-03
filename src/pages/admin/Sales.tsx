@@ -106,13 +106,16 @@ export default function AdminSales() {
     return items.reduce((s, it) => {
       let cost = (productCosts[it.product_id] || 0) * it.quantity;
       for (const opt of it.selected_options || []) {
-        cost += (optionCosts[`${it.product_id}::${opt.item_name}`] || 0) * it.quantity;
+        const optionKey = `${it.product_id}::${opt.group_name}::${opt.item_name}`;
+        const legacyKey = `${it.product_id}::${opt.item_name}`;
+        cost += (optionCosts[optionKey] ?? optionCosts[legacyKey] ?? 0) * it.quantity;
       }
       return s + cost;
     }, 0);
   };
 
-  const orderProfit = (order: Order): number => Number(order.total) - orderCost(order);
+  const orderProfit = (order: Order): number =>
+    Number(order.total) - Number(order.delivery_fee || 0) - orderCost(order);
 
   const updateStatus = async (orderId: string, status: OrderStatus) => {
     const { error } = await supabase
@@ -128,17 +131,24 @@ export default function AdminSales() {
   };
 
   const markSelectedDelivered = async () => {
-    if (selected.size === 0) return;
-    if (!confirm(`¿Marcar ${selected.size} pedido(s) como entregado(s)?`)) return;
+    const deliverable = filtered
+      .filter((order) => selected.has(order.id) && order.status !== 'cancelled')
+      .map((order) => order.id);
+    if (deliverable.length === 0) {
+      toast.error('No hay pedidos válidos seleccionados');
+      setSelected(new Set());
+      return;
+    }
+    if (!confirm(`¿Marcar ${deliverable.length} pedido(s) como entregado(s)?`)) return;
     const { error } = await supabase
       .from('orders')
       .update({ status: 'delivered', updated_at: new Date().toISOString() })
-      .in('id', [...selected]);
+      .in('id', deliverable);
     if (error) {
       toast.error('Error al actualizar los pedidos');
       return;
     }
-    toast.success(`${selected.size} pedido(s) marcado(s) como entregado(s)`);
+    toast.success(`${deliverable.length} pedido(s) marcado(s) como entregado(s)`);
     setSelected(new Set());
     loadOrders();
   };
@@ -197,6 +207,7 @@ export default function AdminSales() {
   const manualChange = manualCashNum - manualTotal;
 
   const saveManualOrder = async () => {
+    if (manualSaving) return;
     if (!manualName.trim()) {
       toast.error('Ingresá el nombre del cliente');
       return;
@@ -275,6 +286,10 @@ export default function AdminSales() {
 
   const fromDate = dateFrom ? new Date(dateFrom + 'T00:00:00') : null;
   const toDate = dateTo ? new Date(dateTo + 'T23:59:59') : null;
+
+  useEffect(() => {
+    setSelected(new Set());
+  }, [statusFilter, search, dateFrom, dateTo]);
 
   const filtered = orders.filter((o) => {
     const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
@@ -766,15 +781,34 @@ export default function AdminSales() {
                                         type="checkbox"
                                         checked={checked}
                                         onChange={() => {
-                                          const nextOptions = item.selected_options.filter(
-                                            (selected) => selected.group_name !== group.name
-                                          );
-                                          if (!checked) {
-                                            nextOptions.push({
-                                              group_name: group.name,
-                                              item_name: option.name,
-                                              price: Number(option.price || 0),
-                                            });
+                                          const optionEntry = {
+                                            group_name: group.name,
+                                            item_name: option.name,
+                                            price: Number(option.price || 0),
+                                          };
+                                          let nextOptions: SelectedOption[];
+                                          if (group.multiple) {
+                                            const isSelected = item.selected_options.some(
+                                              (selected) =>
+                                                selected.group_name === group.name &&
+                                                selected.item_name === option.name
+                                            );
+                                            nextOptions = isSelected
+                                              ? item.selected_options.filter(
+                                                  (selected) =>
+                                                    !(
+                                                      selected.group_name === group.name &&
+                                                      selected.item_name === option.name
+                                                    )
+                                                )
+                                              : [...item.selected_options, optionEntry];
+                                          } else {
+                                            nextOptions = [
+                                              ...item.selected_options.filter(
+                                                (selected) => selected.group_name !== group.name
+                                              ),
+                                              ...(checked ? [] : [optionEntry]),
+                                            ];
                                           }
                                           const optionPrice = nextOptions.reduce(
                                             (sum, selected) => sum + Number(selected.price || 0),

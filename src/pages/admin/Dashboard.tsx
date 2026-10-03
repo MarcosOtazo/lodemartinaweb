@@ -12,12 +12,23 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   const loadOrders = async () => {
-    const { data } = await supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(300);
-    setOrders((data || []) as unknown as Order[]);
+    const pageSize = 1000;
+    const all: Order[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (error) break;
+      const rows = (data || []) as unknown as Order[];
+      all.push(...rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+      if (from > 20000) break;
+    }
+    setOrders(all);
     setLoading(false);
   };
 
@@ -44,7 +55,6 @@ export default function AdminDashboard() {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfYesterday = new Date(startOfToday.getTime() - 24 * 3600 * 1000);
-  const startOfWeek = new Date(startOfToday.getTime() - 6 * 24 * 3600 * 1000);
   const monday = new Date(startOfToday);
   const dayOfWeek = (monday.getDay() + 6) % 7;
   monday.setDate(monday.getDate() - dayOfWeek);
@@ -80,9 +90,9 @@ export default function AdminDashboard() {
   const weekDiff =
     lastWeekRevenue > 0 ? Math.round(((weekRevenue - lastWeekRevenue) / lastWeekRevenue) * 100) : weekRevenue > 0 ? 100 : 0;
 
-  // Gráfico últimos 7 días
+  // Gráfico de la semana actual (lunes a domingo)
   const daysData = Array.from({ length: 7 }, (_, i) => {
-    const dayStart = new Date(startOfWeek.getTime() + i * 24 * 3600 * 1000);
+    const dayStart = new Date(monday.getTime() + i * 24 * 3600 * 1000);
     const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
     const dayOrders = valid.filter((o) => {
       const d = new Date(o.created_at);

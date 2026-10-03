@@ -12,7 +12,7 @@ interface AuthStore {
   signOut: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
+export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
   loading: false,
   initializing: true,
@@ -24,25 +24,31 @@ export const useAuthStore = create<AuthStore>((set) => ({
         set({ user: null, initializing: false });
         return;
       }
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
         .single();
 
+      if (!profile) {
+        if (error) {
+          console.error('Error al cargar el perfil:', error.message);
+        }
+        set({ user: get().user, initializing: false });
+        return;
+      }
+
       set({
-        user: profile
-          ? {
-              id: profile.id,
-              email: profile.email,
-              role: profile.role,
-              full_name: profile.full_name || undefined,
-               phone: profile.phone || undefined,
-               client_number: profile.client_number,
-               created_at: profile.created_at,
-              updated_at: profile.updated_at,
-            }
-          : null,
+        user: {
+          id: profile.id,
+          email: profile.email,
+          role: profile.role,
+          full_name: profile.full_name || undefined,
+          phone: profile.phone || undefined,
+          client_number: profile.client_number,
+          created_at: profile.created_at,
+          updated_at: profile.updated_at,
+        },
         initializing: false,
       });
     } catch {

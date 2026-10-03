@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useConfigStore } from '../../store/config';
@@ -8,6 +8,7 @@ import { Plus, Pencil, Trash2, X, Search, Tags, ChefHat, Wallet, Copy, Package }
 
 type OptionItemDraft = {
   id?: string;
+  _key?: string;
   name: string;
   price: number;
   _deleted?: boolean;
@@ -97,6 +98,7 @@ export default function AdminProducts() {
   const [productCosts, setProductCosts] = useState<Record<string, number>>({});
   const [productVariantPrices, setProductVariantPrices] = useState<Record<string, number>>({});
   const [recipeUsage, setRecipeUsage] = useState<Record<string, number>>({});
+  const editorRequest = useRef(0);
 
   const loadProducts = async () => {
     const { data } = await supabase
@@ -353,7 +355,10 @@ export default function AdminProducts() {
           if (row.id) await supabase.from('receta_ingredientes').delete().eq('id', row.id);
           continue;
         }
-        if (!row.insumo_id || Number(row.quantity) <= 0) continue;
+        if (!row.insumo_id || Number(row.quantity) <= 0) {
+          if (row.id) await supabase.from('receta_ingredientes').delete().eq('id', row.id);
+          continue;
+        }
         const insumo = insumos.find((i) => i.id === row.insumo_id);
         const baseQty = insumo ? toBaseQuantity(insumo.unit, row.unit, Number(row.quantity)) : Number(row.quantity);
         if (row.id) {
@@ -377,7 +382,10 @@ export default function AdminProducts() {
           if (row.id) await supabase.from('receta_subrecetas').delete().eq('id', row.id);
           continue;
         }
-        if (!row.subreceta_id || row.subreceta_id === recetaId) continue;
+        if (!row.subreceta_id || row.subreceta_id === recetaId) {
+          if (row.id) await supabase.from('receta_subrecetas').delete().eq('id', row.id);
+          continue;
+        }
         if (row.id) {
           const { error } = await supabase
             .from('receta_subrecetas')
@@ -486,6 +494,7 @@ export default function AdminProducts() {
   const totalRecipeCost = recipeCost + subCost;
 
   const openEditor = async (product: Product | null) => {
+    const requestId = ++editorRequest.current;
     setImageFile(null);
     setOptionsError(null);
     if (product) {
@@ -494,6 +503,7 @@ export default function AdminProducts() {
         supabase.from('producto_recetas').select('*').eq('product_id', product.id),
         supabase.from('producto_insumos').select('*').eq('product_id', product.id),
       ]);
+      if (editorRequest.current !== requestId) return;
       const { data, error } = optRes;
       let loadedGroups: OptionGroupDraft[] = [];
       if (error) {
@@ -519,8 +529,13 @@ export default function AdminProducts() {
           max_selections: g.max_selections,
           items:
             g.option_items.length > 0
-              ? g.option_items.map((it) => ({ id: it.id, name: it.name, price: Number(it.price) }))
-              : [{ name: '', price: 0 }],
+              ? g.option_items.map((it) => ({
+                  id: it.id,
+                  _key: it.id,
+                  name: it.name,
+                  price: Number(it.price),
+                }))
+              : [{ _key: crypto.randomUUID(), name: '', price: 0 }],
         }));
         setOptionGroups(loadedGroups);
       }
@@ -552,6 +567,7 @@ export default function AdminProducts() {
           .from('option_item_insumos')
           .select('*')
           .in('option_item_id', itemIds);
+        if (editorRequest.current !== requestId) return;
         const map: Record<string, { id?: string; insumo_id: string; unit: string; quantity: number; _deleted?: boolean }[]> = {};
         for (const row of (vii || []) as unknown as {
           id: string;
@@ -626,6 +642,10 @@ export default function AdminProducts() {
         groupId = data.id;
       }
 
+      setOptionGroups((prev) =>
+        prev.map((g, index) => (index === gi ? { ...g, id: groupId } : g))
+      );
+
       for (let ii = 0; ii < group.items.length; ii++) {
         const item = group.items[ii];
         if (item._deleted) {
@@ -635,7 +655,13 @@ export default function AdminProducts() {
           }
           continue;
         }
-        if (!item.name.trim()) continue;
+        if (!item.name.trim()) {
+          if (item.id) {
+            const { error } = await supabase.from('option_items').delete().eq('id', item.id);
+            if (error) throw error;
+          }
+          continue;
+        }
 
         let itemId = item.id;
         if (itemId) {
@@ -659,14 +685,36 @@ export default function AdminProducts() {
           itemId = data.id;
         }
 
-        const key = item.id || `new-${gi}-${ii}`;
+        const key = item._key || item.id || `new-${gi}-${ii}`;
+        setOptionGroups((prev) =>
+          prev.map((g, gIndex) =>
+            gIndex === gi
+              ? {
+                  ...g,
+                  items: g.items.map((it, iIndex) =>
+                    iIndex === ii ? { ...it, id: itemId, _key: itemId } : it
+                  ),
+                }
+              : g
+          )
+        );
+        setItemInsumoRows((prev) => {
+          if (!itemId || key === itemId || !prev[key]) return prev;
+          const next = { ...prev, [itemId]: prev[key] };
+          delete next[key];
+          return next;
+        });
+
         const rows = itemInsumoRows[key] || [];
         for (const row of rows) {
           if (row._deleted) {
             if (row.id) await supabase.from('option_item_insumos').delete().eq('id', row.id);
             continue;
           }
-          if (!row.insumo_id || Number(row.quantity) <= 0) continue;
+          if (!row.insumo_id || Number(row.quantity) <= 0) {
+            if (row.id) await supabase.from('option_item_insumos').delete().eq('id', row.id);
+            continue;
+          }
           const insumo = insumos.find((i) => i.id === row.insumo_id);
           const baseQty = insumo ? toBaseQuantity(insumo.unit, row.unit, Number(row.quantity)) : Number(row.quantity);
           if (row.id) {
@@ -696,8 +744,18 @@ export default function AdminProducts() {
       toast.error('El nombre es obligatorio');
       return;
     }
-    if (editing.price <= 0) {
+    if (!Number.isFinite(Number(editing.price)) || Number(editing.price) <= 0) {
       toast.error('El precio debe ser mayor a 0');
+      return;
+    }
+    const invalidRequiredGroup = optionGroups.find(
+      (group) =>
+        !group._deleted &&
+        group.required &&
+        group.items.filter((item) => !item._deleted && item.name.trim()).length === 0
+    );
+    if (invalidRequiredGroup) {
+      toast.error(`El grupo "${invalidRequiredGroup.name || 'sin nombre'}" es obligatorio y no tiene variantes`);
       return;
     }
     setSaving(true);
@@ -710,10 +768,6 @@ export default function AdminProducts() {
         if (imageError) {
           toast.error(imageError);
           return;
-        }
-        if (editing.image_url) {
-          const oldPath = editing.image_url.split('/').pop();
-          if (oldPath) await supabase.storage.from('product-images').remove([oldPath]);
         }
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `prod-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
@@ -760,6 +814,11 @@ export default function AdminProducts() {
         toast.success('Producto creado');
       }
 
+      if (imageFile && editing.image_url) {
+        const oldPath = editing.image_url.split('/').pop();
+        if (oldPath) await supabase.storage.from('product-images').remove([oldPath]);
+      }
+
       await saveOptionGroups(productId);
       await saveProductCosts(productId);
 
@@ -802,7 +861,10 @@ export default function AdminProducts() {
         if (row.id) await supabase.from('producto_insumos').delete().eq('id', row.id);
         continue;
       }
-      if (!row.insumo_id || Number(row.quantity) <= 0) continue;
+      if (!row.insumo_id || Number(row.quantity) <= 0) {
+        if (row.id) await supabase.from('producto_insumos').delete().eq('id', row.id);
+        continue;
+      }
       const insumo = insumos.find((i) => i.id === row.insumo_id);
       const baseQty = insumo ? toBaseQuantity(insumo.unit, row.unit, Number(row.quantity)) : Number(row.quantity);
       if (row.id) {
@@ -840,6 +902,27 @@ export default function AdminProducts() {
 
   const duplicateProduct = async (product: Product) => {
     try {
+      let duplicatedImageUrl = product.image_url;
+      if (product.image_url) {
+        const oldPath = product.image_url.split('/').pop();
+        if (oldPath) {
+          const ext = oldPath.split('.').pop() || 'jpg';
+          const newPath = `prod-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error: copyError } = await supabase.storage
+            .from('product-images')
+            .copy(oldPath, newPath);
+          if (copyError) {
+            duplicatedImageUrl = null;
+            toast.error('No se pudo copiar la imagen del producto duplicado');
+          } else {
+            const { data: publicUrl } = supabase.storage
+              .from('product-images')
+              .getPublicUrl(newPath);
+            duplicatedImageUrl = publicUrl.publicUrl;
+          }
+        }
+      }
+
       const { data: newProd, error } = await supabase
         .from('products')
         .insert({
@@ -847,7 +930,7 @@ export default function AdminProducts() {
           description: product.description,
           price: product.price,
           category: product.category,
-          image_url: product.image_url,
+          image_url: duplicatedImageUrl,
           is_active: product.is_active,
           sort_order: Number(product.sort_order) + 1,
         })
@@ -950,14 +1033,15 @@ export default function AdminProducts() {
     }
   };
 
-  const updateCategory = async (cat: Category, updates: CategoryUpdate) => {
+  const updateCategory = async (cat: Category, updates: CategoryUpdate): Promise<boolean> => {
     const { error } = await supabase.from('categories').update(updates).eq('id', cat.id);
     if (error) {
       toast.error('Error al guardar la categoría');
-      return;
+      return false;
     }
     toast.success('Categoría actualizada');
     loadCategories();
+    return true;
   };
 
   const uploadCategoryImage = async (cat: Category, file: File) => {
@@ -967,10 +1051,6 @@ export default function AdminProducts() {
       return;
     }
     try {
-      if (cat.image_url) {
-        const oldPath = cat.image_url.split('/').pop();
-        if (oldPath) await supabase.storage.from('product-images').remove([oldPath]);
-      }
       const fileExt = file.name.split('.').pop();
       const fileName = `cat-${cat.id}-${Date.now()}.${fileExt}`;
       const { error: uploadError } = await supabase.storage
@@ -980,7 +1060,15 @@ export default function AdminProducts() {
       const { data: publicUrl } = supabase.storage
         .from('product-images')
         .getPublicUrl(fileName);
-      await updateCategory(cat, { image_url: publicUrl.publicUrl });
+      const updated = await updateCategory(cat, { image_url: publicUrl.publicUrl });
+      if (!updated) {
+        await supabase.storage.from('product-images').remove([fileName]);
+        return;
+      }
+      if (cat.image_url) {
+        const oldPath = cat.image_url.split('/').pop();
+        if (oldPath) await supabase.storage.from('product-images').remove([oldPath]);
+      }
     } catch (error) {
       console.error(error);
       toast.error('Error al subir la imagen');
@@ -1004,7 +1092,11 @@ export default function AdminProducts() {
   };
 
   const deleteCategory = async (cat: Category) => {
-    if (!confirm(`¿Eliminar la categoría "${cat.name}"? Los productos que la usen quedarán sin categoría.`)) return;
+    if (products.some((p) => p.category === cat.id)) {
+      toast.error('No podés eliminar la categoría: tiene productos asignados. Movelos a otra categoría primero.');
+      return;
+    }
+    if (!confirm(`¿Eliminar la categoría "${cat.name}"?`)) return;
     const { error } = await supabase.from('categories').delete().eq('id', cat.id);
     if (error) {
       toast.error('Error al eliminar la categoría');
@@ -1659,7 +1751,7 @@ export default function AdminProducts() {
                       s +
                       group.items.reduce((s2, item, ii) => {
                         if (item._deleted || !item.name.trim()) return s2;
-                        const key = item.id || `new-${gi}-${ii}`;
+                        const key = item._key || item.id || `new-${gi}-${ii}`;
                         const rows = itemInsumoRows[key] || [];
                         return (
                           s2 +
@@ -1779,7 +1871,7 @@ export default function AdminProducts() {
                           multiple: true,
                           min_selections: 0,
                           max_selections: 99,
-                          items: [{ name: '', price: 0 }],
+                          items: [{ _key: crypto.randomUUID(), name: '', price: 0 }],
                         },
                       ])
                     }
@@ -1892,7 +1984,7 @@ export default function AdminProducts() {
                               type="button"
                               onClick={() =>
                                 setVariantInsumoDraft({
-                                  key: item.id || `new-${gi}-${ii}`,
+                                  key: item._key || item.id || `new-${gi}-${ii}`,
                                   itemName: item.name.trim() || `Variante ${ii + 1}`,
                                 })
                               }
@@ -1923,7 +2015,10 @@ export default function AdminProducts() {
                           type="button"
                           onClick={() => {
                             const next = [...optionGroups];
-                            next[gi] = { ...group, items: [...group.items, { name: '', price: 0 }] };
+                            next[gi] = {
+                              ...group,
+                              items: [...group.items, { _key: crypto.randomUUID(), name: '', price: 0 }],
+                            };
                             setOptionGroups(next);
                           }}
                           className="text-sm text-primary font-semibold hover:underline"
@@ -1996,7 +2091,32 @@ export default function AdminProducts() {
                   <select
                     className="input"
                     value={insumoDraft.unit}
-                    onChange={(e) => setInsumoDraft({ ...insumoDraft, unit: e.target.value })}
+                    onChange={(e) => {
+                      const nextUnit = e.target.value;
+                      const bulkUnits = ['unidad', 'docena', 'porción'];
+                      const wasBulk = bulkUnits.includes(insumoDraft.unit);
+                      const isBulk = bulkUnits.includes(nextUnit);
+                      let cost = Number(insumoDraft.cost) || 0;
+                      let quantity = insumoDraft.quantity;
+
+                      if (!wasBulk && !isBulk) {
+                        cost = cost * toBaseQuantity(insumoDraft.unit, nextUnit, 1);
+                        quantity = 1;
+                      } else if (wasBulk && !isBulk) {
+                        const qty = Number(insumoDraft.quantity) > 0 ? Number(insumoDraft.quantity) : 1;
+                        cost = cost / qty;
+                        quantity = 1;
+                      } else {
+                        quantity = wasBulk && isBulk ? insumoDraft.quantity : 1;
+                      }
+
+                      setInsumoDraft({
+                        ...insumoDraft,
+                        unit: nextUnit,
+                        cost: Number(cost.toFixed(4)),
+                        quantity,
+                      });
+                    }}
                   >
                     <option value="unidad">unidad</option>
                     <option value="kg">kg</option>

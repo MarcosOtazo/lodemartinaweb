@@ -12,12 +12,13 @@ interface CartStore {
   count: () => number;
 }
 
-function buildKey(product: Product, selectedOptions: SelectedOption[]): string {
+function buildKey(product: Product, selectedOptions: SelectedOption[], notes?: string): string {
   const opts = [...selectedOptions]
     .sort((a, b) => (a.group_name + a.item_name).localeCompare(b.group_name + b.item_name))
     .map((o) => `${o.group_name}:${o.item_name}`)
     .join('|');
-  return `${product.id}${opts ? '::' + opts : ''}`;
+  const noteKey = (notes || '').trim().toLowerCase();
+  return `${product.id}${opts ? '::' + opts : ''}${noteKey ? `|nota:${noteKey}` : ''}`;
 }
 
 function unitPrice(product: Product, selectedOptions: SelectedOption[]): number {
@@ -30,13 +31,13 @@ export const useCartStore = create<CartStore>()(
       items: [],
 
       addItem: (product, quantity = 1, selectedOptions = [], notes) => {
-        const key = buildKey(product, selectedOptions);
+        const key = buildKey(product, selectedOptions, notes);
         const price = unitPrice(product, selectedOptions);
         const existing = get().items.find((i) => i.key === key);
         if (existing) {
           set({
             items: get().items.map((i) =>
-              i.key === key ? { ...i, quantity: i.quantity + quantity, notes: notes || i.notes } : i
+              i.key === key ? { ...i, quantity: i.quantity + quantity } : i
             ),
           });
         } else {

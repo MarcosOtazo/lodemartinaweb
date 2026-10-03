@@ -1,6 +1,6 @@
 -- ============================================================
--- LO DE MARTINA - Esquema de base de datos (version idempotente)
--- Se puede ejecutar las veces que sea necesario.
+-- LO DE MARTINA - Esquema base (instalacion inicial unicamente)
+-- ⚠️ NO REEJECUTAR sobre una base con datos: borra tablas (profiles, products, orders, site_config).
 -- Supabase: SQL Editor -> New query -> pegar todo -> Run
 -- ============================================================
 

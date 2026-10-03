@@ -2,6 +2,7 @@
 -- LO DE MARTINA - Actualizacion: insumos en variantes
 -- Cada variante (opcion de producto) puede tener insumos
 -- para que su costo tambien se calcule en los pedidos.
+-- ⚠️ NO REEJECUTAR: borra los insumos de todas las variantes.
 -- Ejecutar en Supabase: SQL Editor -> New query -> pegar -> Run
 -- ============================================================
 

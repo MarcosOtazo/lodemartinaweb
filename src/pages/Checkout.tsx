@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Copy } from 'lucide-react';
@@ -25,7 +25,7 @@ const BANK_DETAILS = {
 
 export default function Checkout() {
   const { items, subtotal, clear } = useCartStore();
-  const { user } = useAuthStore();
+  const { user, initializing } = useAuthStore();
   const config = useConfigStore((s) => s.config);
   const navigate = useNavigate();
 
@@ -38,6 +38,12 @@ export default function Checkout() {
   const [phone, setPhone] = useState(user?.phone || '');
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (!user) return;
+    setName((prev) => prev || user.full_name || '');
+    setPhone((prev) => prev || user.phone || '');
+  }, [user]);
+
   const deliveryFee = deliveryType === 'delivery' ? Number(config.delivery_fee) || 0 : 0;
   const total = subtotal() + deliveryFee;
   const belowMinimum = Number(config.min_order_amount) > 0 && subtotal() < Number(config.min_order_amount);
@@ -48,6 +54,10 @@ export default function Checkout() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (initializing) {
+      toast.error('Esperá un momento, estamos cargando tu cuenta');
+      return;
+    }
     if (!isOpen) {
       toast.error('Estamos cerrados en este momento');
       return;
@@ -60,10 +70,21 @@ export default function Checkout() {
       toast.error(`El pedido mínimo es ${formatPrice(Number(config.min_order_amount))}`);
       return;
     }
-    if (paymentMethod === 'cash' && (cashAmountNum <= 0 || cashAmountNum < total)) {
-      toast.error('Ingresá con cuánto vas a pagar en efectivo');
+    if (paymentMethod === 'cash' && cashAmountNum < total) {
+      toast.error(
+        cashAmountNum <= 0
+          ? 'Ingresá con cuánto vas a pagar en efectivo'
+          : `Faltan ${formatPrice(total - cashAmountNum)} para completar el total`
+      );
       return;
     }
+    const whatsappNumber = config.whatsapp_number || import.meta.env.VITE_WHATSAPP_NUMBER;
+    if (!whatsappNumber) {
+      toast.error('No hay número de WhatsApp configurado. Contactanos por otro medio.');
+      return;
+    }
+
+    const waWindow = window.open('', '_blank');
     setSubmitting(true);
 
     const paymentLabel =
@@ -91,9 +112,7 @@ export default function Checkout() {
             payment_method: paymentMethod,
             delivery_address: deliveryType === 'delivery' ? address : null,
             notes: finalNotes,
-          })
-          .select()
-          .single();
+          });
         if (error) throw error;
       }
 
@@ -105,20 +124,17 @@ export default function Checkout() {
         name,
         paymentLabel,
         deliveryType === 'delivery' ? address : undefined,
-        finalNotes
+        finalNotes,
+        phone
       );
 
-      const whatsappNumber = config.whatsapp_number || import.meta.env.VITE_WHATSAPP_NUMBER;
-      if (whatsappNumber) {
-        openWhatsApp(message, whatsappNumber);
-      } else {
-        toast.error('No hay número de WhatsApp configurado. Contactanos por otro medio.');
-      }
+      openWhatsApp(message, whatsappNumber, waWindow);
 
       clear();
       toast.success('¡Pedido enviado! Te contactaremos por WhatsApp');
       navigate(user ? '/pedidos' : '/');
     } catch (error) {
+      if (waWindow) waWindow.close();
       console.error(error);
       toast.error('Hubo un error al procesar tu pedido. Intentalo de nuevo.');
     } finally {
@@ -230,7 +246,12 @@ export default function Checkout() {
                   />
                 </div>
                 <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                  El precio de delivery de {formatPrice(deliveryFee)} corresponde a la zona de centro y barrios. Para otras zonas o sectores, y también en días de lluvia, el valor puede variar y se coordina por WhatsApp. Si necesitás, compartí tu ubicación por WhatsApp al confirmar el pedido para que podamos ubicarte mejor.
+                  {deliveryFee > 0
+                    ? `El precio de delivery de ${formatPrice(deliveryFee)} corresponde a la zona de centro y barrios.`
+                    : 'El valor del envío se coordina por WhatsApp según la zona.'}{' '}
+                  Para otras zonas o sectores, y también en días de lluvia, el valor puede variar. Si
+                  necesitás, compartí tu ubicación por WhatsApp al confirmar el pedido para que
+                  podamos ubicarte mejor.
                 </p>
               </div>
             )}

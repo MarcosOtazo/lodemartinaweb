@@ -5,18 +5,26 @@ import type { ProductOptionGroup } from '../types';
 export function useProductOptions(productIds: string[]) {
   const [groups, setGroups] = useState<Record<string, ProductOptionGroup[]>>({});
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (productIds.length === 0) return;
     let cancelled = false;
     setLoading(true);
+    setError(null);
     supabase
       .from('product_options')
       .select('*, option_items(*)')
       .in('product_id', productIds)
       .order('sort_order')
-      .then(({ data }) => {
+      .then(({ data, error: queryError }) => {
         if (cancelled) return;
+        if (queryError) {
+          setGroups({});
+          setError(queryError.message);
+          setLoading(false);
+          return;
+        }
         const byProduct: Record<string, ProductOptionGroup[]> = {};
         for (const row of (data || []) as unknown as (ProductOptionGroup & { option_items?: unknown })[]) {
           const rawItems = Array.isArray(row.option_items)
@@ -37,5 +45,5 @@ export function useProductOptions(productIds: string[]) {
     };
   }, [productIds.join(',')]);
 
-  return { groups, loading };
+  return { groups, loading, error };
 }

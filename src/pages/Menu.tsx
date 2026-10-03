@@ -21,7 +21,7 @@ export default function Menu() {
   const param = searchParams.get('categoria');
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeCategory, setActiveCategory] = useState<ProductCategory>(
-    (param as ProductCategory) || 'hamburguesas'
+    (param as ProductCategory) || ''
   );
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,19 +29,42 @@ export default function Menu() {
 
   useEffect(() => {
     if (param && param.trim()) {
-      setActiveCategory(param as ProductCategory);
+      const next = param as ProductCategory;
+      if (categories.length === 0 || categories.some((c) => c.id === next)) {
+        setActiveCategory(next);
+      } else {
+        setActiveCategory(categories[0]?.id || next);
+      }
     }
-  }, [param]);
+  }, [param, categories]);
 
   useEffect(() => {
+    let cancelled = false;
     supabase
       .from('categories')
       .select('*')
       .order('sort_order')
-      .then(({ data }) => setCategories((data || []) as Category[]));
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        const cats = (data || []) as Category[];
+        setCategories(cats);
+        if (error || cats.length === 0) {
+          setLoading(false);
+          return;
+        }
+        setActiveCategory((prev) => {
+          if (prev && cats.some((c) => c.id === prev)) return prev;
+          return cats[0].id;
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
+    if (!activeCategory) return;
+    let cancelled = false;
     setLoading(true);
     supabase
       .from('products')
@@ -50,12 +73,16 @@ export default function Menu() {
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
       .then(({ data }) => {
+        if (cancelled) return;
         setProducts(data || []);
         setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [activeCategory]);
 
-  const { groups } = useProductOptions(products.map((p) => p.id));
+  const { groups, loading: optionsLoading, error: optionsError } = useProductOptions(products.map((p) => p.id));
   const modalGroups: ProductOptionGroup[] = selectedProduct ? groups[selectedProduct.id] || [] : [];
 
   const handleCategory = (cat: ProductCategory) => {
@@ -129,8 +156,11 @@ export default function Menu() {
       )}
 
       <ProductModal
+        key={selectedProduct?.id ?? 'empty'}
         product={selectedProduct}
         optionGroups={modalGroups}
+        optionsLoading={optionsLoading}
+        optionsError={optionsError}
         onClose={() => setSelectedProduct(null)}
       />
     </div>

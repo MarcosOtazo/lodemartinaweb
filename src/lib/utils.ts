@@ -18,7 +18,7 @@ export function validateImageFile(file: File): string | null {
     return 'Formato no permitido. Usá JPG, PNG o WebP.';
   }
   if (file.size > MAX_IMAGE_BYTES) {
-    return 'La imagen no puede superar los 5 MB.';
+    return 'La imagen no puede superar los 8 MB.';
   }
   return null;
 }
@@ -83,12 +83,14 @@ export function buildWhatsAppMessage(
   customerName: string,
   paymentMethod: string,
   deliveryAddress?: string,
-  notes?: string
+  notes?: string,
+  customerPhone?: string
 ): string {
   const lines: string[] = [];
   lines.push('🛎️ *NUEVO PEDIDO - Lo de Martina*');
   lines.push('');
   lines.push(`👤 *Cliente:* ${customerName}`);
+  if (customerPhone) lines.push(`📱 *Teléfono:* ${customerPhone}`);
   lines.push('');
   lines.push('📋 *Detalle del pedido:*');
   items.forEach((item, i) => {
@@ -116,9 +118,13 @@ export function buildWhatsAppMessage(
   return encodeURIComponent(lines.join('\n'));
 }
 
-export function openWhatsApp(message: string, phoneNumber: string) {
+export function openWhatsApp(message: string, phoneNumber: string, targetWindow?: Window | null) {
   const clean = phoneNumber.replace(/\D/g, '');
   const url = `https://wa.me/${clean}?text=${message}`;
+  if (targetWindow && !targetWindow.closed) {
+    targetWindow.location.href = url;
+    return;
+  }
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 

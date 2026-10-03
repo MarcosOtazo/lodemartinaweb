@@ -17,6 +17,11 @@ dist-ssr
 .env.*
 !.env.example
 
+# Scripts locales de mantenimiento
+apply-*.js
+apply-*.cjs
+find_paren.cjs
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

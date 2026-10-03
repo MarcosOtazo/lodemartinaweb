@@ -24,6 +24,7 @@ export default function MyOrders() {
       return;
     }
 
+    setLoading(true);
     supabase
       .from('orders')
       .select('*')
@@ -94,8 +95,12 @@ export default function MyOrders() {
                     <p className="font-bold text-lg">Pedido #{order.id.slice(0, 8).toUpperCase()}</p>
                     <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${ORDER_STATUS_COLORS[order.status]}`}>
-                    {ORDER_STATUS_LABELS[order.status]}
+                  <span
+                    className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                      ORDER_STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    {ORDER_STATUS_LABELS[order.status] || order.status}
                   </span>
                 </div>
                 <div className="space-y-2 mb-4">

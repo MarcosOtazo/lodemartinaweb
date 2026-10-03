@@ -63,9 +63,8 @@ export default function App() {
     loadUser();
     loadConfig();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) loadUser();
-      else loadUser();
+    const { data: authListener } = supabase.auth.onAuthStateChange(() => {
+      loadUser();
     });
     return () => {
       authListener.subscription.unsubscribe();

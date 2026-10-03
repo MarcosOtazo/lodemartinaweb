@@ -1,7 +1,7 @@
 -- ============================================================
 -- LO DE MARTINA - Actualizacion completa: categorias dinamicas
 -- (con imagenes y sin limite de cantidad) + opciones de productos
--- Se puede ejecutar siempre, sin importar que haya corrido antes.
+-- ⚠️ NO REEJECUTAR: borra categorias, grupos y variantes existentes.
 -- Supabase: SQL Editor -> New query -> pegar todo -> Run
 -- ============================================================
 

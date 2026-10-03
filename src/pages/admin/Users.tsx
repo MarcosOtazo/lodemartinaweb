@@ -27,34 +27,62 @@ export default function AdminUsers() {
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  const loadUsers = () => {
+  const loadUsers = async () => {
     setLoading(true);
-    Promise.all([
-      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('orders').select('user_id, total, status').limit(1000),
-    ]).then(([profilesRes, ordersRes]) => {
-      const orders = (ordersRes.data || []) as unknown as Array<{
+    const pageSize = 1000;
+
+    const profiles: User[] = [];
+    let profileFrom = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('id')
+        .range(profileFrom, profileFrom + pageSize - 1);
+      if (error) break;
+      const rows = (data || []) as unknown as User[];
+      profiles.push(...rows);
+      if (rows.length < pageSize) break;
+      profileFrom += pageSize;
+      if (profileFrom > 50000) break;
+    }
+
+    const orders: Array<{ user_id: string | null; total: number; status: string }> = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('user_id, total, status')
+        .order('id')
+        .range(from, from + pageSize - 1);
+      if (error) break;
+      const rows = (data || []) as unknown as Array<{
         user_id: string | null;
         total: number;
         status: string;
       }>;
-      const stats = new Map<string, { count: number; spent: number }>();
-      orders.forEach((o) => {
-        if (!o.user_id || o.status === 'cancelled') return;
-        const cur = stats.get(o.user_id) || { count: 0, spent: 0 };
-        cur.count++;
-        cur.spent += Number(o.total);
-        stats.set(o.user_id, cur);
-      });
+      orders.push(...rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+      if (from > 50000) break;
+    }
 
-      const rows = ((profilesRes.data || []) as unknown as User[]).map((p) => ({
-        ...p,
-        orders_count: stats.get(p.id)?.count || 0,
-        total_spent: stats.get(p.id)?.spent || 0,
-      }));
-      setClients(rows);
-      setLoading(false);
+    const stats = new Map<string, { count: number; spent: number }>();
+    orders.forEach((o) => {
+      if (!o.user_id || o.status === 'cancelled') return;
+      const cur = stats.get(o.user_id) || { count: 0, spent: 0 };
+      cur.count++;
+      cur.spent += Number(o.total);
+      stats.set(o.user_id, cur);
     });
+
+    const rows = profiles.map((p) => ({
+      ...p,
+      orders_count: stats.get(p.id)?.count || 0,
+      total_spent: stats.get(p.id)?.spent || 0,
+    }));
+    setClients(rows);
+    setLoading(false);
   };
 
   useEffect(() => {

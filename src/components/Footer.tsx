@@ -21,7 +21,9 @@ function InstagramIcon() {
 export default function Footer() {
   const config = useConfigStore((s) => s.config);
 
-  const mapsUrl = 'https://maps.app.goo.gl/X34TEGiw8TCtrj5r8';
+  const mapsUrl = config.address.trim()
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(config.address.trim())}`
+    : 'https://maps.app.goo.gl/X34TEGiw8TCtrj5r8';
   const patternImage = config.footer_pattern_url;
 
   return (

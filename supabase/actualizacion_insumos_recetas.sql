@@ -1,5 +1,6 @@
 -- ============================================================
 -- LO DE MARTINA - Actualizacion: insumos y recetas (costos)
+-- ⚠️ NO REEJECUTAR: borra insumos y recetas existentes.
 -- Ejecutar en Supabase: SQL Editor -> New query -> pegar -> Run
 -- ============================================================
 

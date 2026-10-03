@@ -49,6 +49,11 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
         config: {
           ...get().config,
           ...data,
+          site_name: data.site_name || 'Lo de Martina',
+          primary_color: data.primary_color || '#e85d04',
+          secondary_color: data.secondary_color || '#1f2937',
+          hero_title: data.hero_title || 'Lo de Martina',
+          hero_subtitle: data.hero_subtitle || '',
           whatsapp_number: data.whatsapp_number || '',
           address: data.address || '',
           facebook_url: data.facebook_url || '',

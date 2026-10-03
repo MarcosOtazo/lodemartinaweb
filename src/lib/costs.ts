@@ -88,7 +88,11 @@ export async function fetchCostData(): Promise<CostData> {
     insumo_id: string;
     quantity: number;
   }>;
-  const productOptions = (poRes.data || []) as unknown as Array<{ id: string; product_id: string }>;
+  const productOptions = (poRes.data || []) as unknown as Array<{
+    id: string;
+    product_id: string;
+    name: string;
+  }>;
 
   const optionItemCost = new Map<string, number>();
   optionInsumos.forEach((oi) => {
@@ -98,15 +102,17 @@ export async function fetchCostData(): Promise<CostData> {
       cur + (insumosCost.get(oi.insumo_id) || 0) * Number(oi.quantity)
     );
   });
-  const optionToProduct = new Map<string, string>();
-  productOptions.forEach((po) => optionToProduct.set(po.id, po.product_id));
+  const optionToProduct = new Map<string, { productId: string; groupName: string }>();
+  productOptions.forEach((po) =>
+    optionToProduct.set(po.id, { productId: po.product_id, groupName: po.name })
+  );
 
   const optionCosts: Record<string, number> = {};
   optionItems.forEach((it) => {
-    const productId = optionToProduct.get(it.option_id);
+    const meta = optionToProduct.get(it.option_id);
     const cost = optionItemCost.get(it.id) || 0;
-    if (productId && cost > 0) {
-      optionCosts[`${productId}::${it.name}`] = cost;
+    if (meta && cost > 0) {
+      optionCosts[`${meta.productId}::${meta.groupName}::${it.name}`] = cost;
     }
   });
 

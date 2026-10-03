@@ -1,9 +1,12 @@
+alter table public.profiles
+  add column if not exists client_number bigint;
+
 do $$
 declare
   client_record record;
   candidate bigint;
 begin
-  for client_record in select id from public.profiles loop
+  for client_record in select id from public.profiles where client_number is null loop
     loop
       candidate := floor(random() * 899999) + 100000;
       exit when not exists (
@@ -22,6 +25,12 @@ end $$;
 
 alter table public.profiles
   alter column client_number drop default;
+
+alter table public.profiles
+  alter column client_number set not null;
+
+create unique index if not exists profiles_client_number_unique
+  on public.profiles (client_number);
 
 create or replace function public.assign_random_client_number()
 returns trigger

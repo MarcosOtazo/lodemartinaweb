@@ -1,6 +1,7 @@
 -- ============================================================
 -- LO DE MARTINA - Actualizacion: unidades (gr/kg, ml/litro),
 -- sub-recetas y productos con recetas + insumos directos
+-- ⚠️ NO REEJECUTAR: borra ingredientes, sub-recetas y asociaciones existentes.
 -- Ejecutar en Supabase: SQL Editor -> New query -> pegar -> Run
 -- ============================================================
 

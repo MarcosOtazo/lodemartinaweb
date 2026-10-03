@@ -1,19 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/auth';
 import { cn } from '../lib/utils';
 
 export default function Login() {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const location = useLocation();
+  const [mode, setMode] = useState<'login' | 'register'>(
+    location.pathname === '/registro' ? 'register' : 'login'
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const { signIn, signUp, loading } = useAuthStore();
   const navigate = useNavigate();
-  const location = useLocation();
   const from = (location.state as { from?: string })?.from || '/';
+
+  useEffect(() => {
+    setMode(location.pathname === '/registro' ? 'register' : 'login');
+  }, [location.pathname]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +63,10 @@ export default function Login() {
         <div className="card p-6">
           <div className="flex rounded-lg bg-gray-100 p-1 mb-6">
             <button
-              onClick={() => setMode('login')}
+              onClick={() => {
+                setMode('login');
+                if (location.pathname !== '/login') navigate('/login', { state: location.state });
+              }}
               className={cn(
                 'flex-1 py-2 rounded-md text-sm font-semibold transition-colors',
                 mode === 'login' ? 'bg-white shadow text-gray-900' : 'text-gray-500'
@@ -66,7 +75,10 @@ export default function Login() {
               Iniciar sesión
             </button>
             <button
-              onClick={() => setMode('register')}
+              onClick={() => {
+                setMode('register');
+                if (location.pathname !== '/registro') navigate('/registro', { state: location.state });
+              }}
               className={cn(
                 'flex-1 py-2 rounded-md text-sm font-semibold transition-colors',
                 mode === 'register' ? 'bg-white shadow text-gray-900' : 'text-gray-500'
@@ -147,14 +159,14 @@ export default function Login() {
           {mode === 'login' ? (
             <>
               ¿No tenés cuenta?{' '}
-              <Link to="/registro" className="text-primary font-semibold hover:underline">
+              <Link to="/registro" state={location.state} className="text-primary font-semibold hover:underline">
                 Registrate acá
               </Link>
             </>
           ) : (
             <>
               ¿Ya tenés cuenta?{' '}
-              <Link to="/login" className="text-primary font-semibold hover:underline">
+              <Link to="/login" state={location.state} className="text-primary font-semibold hover:underline">
                 Ingresá acá
               </Link>
             </>
