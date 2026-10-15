@@ -333,47 +333,70 @@ export function printOrderTicket(order: Order) {
     .map(
       (it) => `
       <div class="item">
-        <div>
+        <div class="item-main">
           <strong>${escapeHtml(it.quantity)}x ${escapeHtml(it.product_name)}</strong>
           ${(it.selected_options || [])
-            .map((opt) => `<div class="opt">· ${escapeHtml(opt.item_name)}${opt.price > 0 ? ` (+${escapeHtml(formatPrice(opt.price))})` : ''}</div>`)
+            .map((opt) => `<div class="opt">+ ${escapeHtml(opt.item_name)}${opt.price > 0 ? ` (${escapeHtml(formatPrice(opt.price))})` : ''}</div>`)
             .join('')}
           ${it.notes ? `<div class="opt">Nota: ${escapeHtml(it.notes)}</div>` : ''}
         </div>
-        <span>${escapeHtml(formatPrice(Number(it.product_price) * Number(it.quantity)))}</span>
+        <span class="item-price">${escapeHtml(formatPrice(Number(it.product_price) * Number(it.quantity)))}</span>
       </div>`
     )
     .join('');
 
-  const w = window.open('', '_blank', 'width=360,height=640');
+  const deliveryType = order.delivery_address ? 'ENVIO' : 'RETIRO';
+
+  const w = window.open('', '_blank', 'width=320,height=640');
   if (!w) return;
   w.opener = null;
-  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Comanda ${order.id.slice(0, 8).toUpperCase()}</title>
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+  <title>Comanda ${order.id.slice(0, 8).toUpperCase()}</title>
   <style>
-    body { font-family: 'Courier New', monospace; font-size: 13px; padding: 16px; color: #000; }
-    h1 { font-size: 16px; text-align: center; margin: 0 0 4px; }
-    .sub { text-align: center; font-size: 11px; margin-bottom: 12px; }
-    .item { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-    .opt { font-size: 11px; color: #444; }
-    hr { border: none; border-top: 1px dashed #000; margin: 10px 0; }
-    .total { font-size: 16px; font-weight: bold; display: flex; justify-content: space-between; }
-    .info { font-size: 12px; margin-top: 8px; }
+    @page { size: 58mm auto; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      width: 58mm;
+      padding: 2mm 3mm 8mm;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      line-height: 1.25;
+      color: #000;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    h1 { font-size: 15px; text-align: center; margin: 0 0 2px; letter-spacing: 0.5px; }
+    .sub { text-align: center; font-size: 10px; margin-bottom: 6px; }
+    .type { text-align: center; font-size: 12px; font-weight: bold; border: 1px solid #000; padding: 2px 0; margin: 4px 0 6px; }
+    hr { border: none; border-top: 1px dashed #000; margin: 5px 0; }
+    .item { display: flex; justify-content: space-between; gap: 4px; margin-bottom: 4px; break-inside: avoid; }
+    .item-main { min-width: 0; word-break: break-word; }
+    .item-price { white-space: nowrap; font-weight: bold; }
+    .opt { font-size: 10px; padding-left: 6px; }
+    .total { font-size: 14px; font-weight: bold; display: flex; justify-content: space-between; border-top: 1px solid #000; padding-top: 3px; }
+    .info { font-size: 10px; margin-top: 6px; break-inside: avoid; }
+    .footer { text-align: center; font-size: 10px; margin-top: 8px; }
   </style></head><body>
-    <h1>${'Lo de Martina'}</h1>
+    <h1>Lo de Martina</h1>
     <div class="sub">Comanda #${order.id.slice(0, 8).toUpperCase()}<br>${formatDate(order.created_at)}</div>
+    <div class="type">${deliveryType}</div>
     <hr>
     ${rows}
-    <hr>
     <div class="total"><span>TOTAL</span><span>${escapeHtml(formatPrice(Number(order.total)))}</span></div>
     <div class="info">
       Cliente: ${escapeHtml(order.user_name)}<br>
       Tel: ${escapeHtml(order.user_phone)}<br>
       Pago: ${escapeHtml(PAYMENT_METHODS[order.payment_method] || order.payment_method)}<br>
-      ${order.delivery_address ? `Dirección: ${escapeHtml(order.delivery_address)}<br>` : ''}
+      Subtotal: ${escapeHtml(formatPrice(Number(order.subtotal)))}<br>
+      ${Number(order.delivery_fee) > 0 ? `Envio: ${escapeHtml(formatPrice(Number(order.delivery_fee)))}<br>` : ''}
+      ${order.delivery_address ? `Direccion: ${escapeHtml(order.delivery_address)}<br>` : ''}
       ${order.notes ? `Notas: ${escapeHtml(order.notes)}` : ''}
     </div>
+    <div class="footer">Gracias por su pedido</div>
   </body></html>`);
   w.document.close();
   w.focus();
-  setTimeout(() => w.print(), 300);
+  setTimeout(() => w.print(), 400);
 }
