@@ -353,12 +353,12 @@ export function printOrderTicket(order: Order) {
   w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
   <title>Comanda ${order.id.slice(0, 8).toUpperCase()}</title>
   <style>
-    @page { size: 58mm auto; margin: 0; }
+    @page { size: 58mm 200mm; margin: 0; }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body {
       width: 58mm;
-      padding: 2mm 3mm 8mm;
+      padding: 2mm 3mm 6mm;
       font-family: 'Courier New', Courier, monospace;
       font-size: 11px;
       line-height: 1.25;
@@ -398,5 +398,18 @@ export function printOrderTicket(order: Order) {
   </body></html>`);
   w.document.close();
   w.focus();
-  setTimeout(() => w.print(), 400);
+
+  setTimeout(() => {
+    try {
+      const doc = w.document;
+      const heightPx = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight);
+      const heightMm = Math.max(60, Math.ceil((heightPx * 25.4) / 96) + 6);
+      const pageStyle = doc.createElement('style');
+      pageStyle.textContent = `@page { size: 58mm ${heightMm}mm; margin: 0; }`;
+      doc.head.appendChild(pageStyle);
+      setTimeout(() => w.print(), 150);
+    } catch {
+      w.print();
+    }
+  }, 300);
 }
