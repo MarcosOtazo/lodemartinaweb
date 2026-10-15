@@ -360,25 +360,28 @@ export function printOrderTicket(order: Order) {
       width: 48mm;
       margin: 0 auto;
       padding: 2mm 0 6mm;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
-      line-height: 1.25;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.3;
       color: #000;
       background: #fff;
+      -webkit-text-stroke: 0.25px #000;
+      text-shadow: 0 0 0.35px #000;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-    h1 { font-size: 15px; text-align: center; margin: 0 0 2px; letter-spacing: 0.5px; }
-    .sub { text-align: center; font-size: 10px; margin-bottom: 6px; }
-    .type { text-align: center; font-size: 12px; font-weight: bold; border: 1px solid #000; padding: 2px 0; margin: 4px 0 6px; }
-    hr { border: none; border-top: 1px dashed #000; margin: 5px 0; }
-    .item { display: flex; justify-content: space-between; gap: 4px; margin-bottom: 4px; break-inside: avoid; }
+    h1 { font-size: 17px; font-weight: 700; text-align: center; margin: 0 0 2px; letter-spacing: 0.5px; }
+    .sub { text-align: center; font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+    .type { text-align: center; font-size: 14px; font-weight: 700; border: 1.5px solid #000; padding: 3px 0; margin: 4px 0 6px; }
+    hr { border: none; border-top: 1.5px solid #000; margin: 6px 0; }
+    .item { display: flex; justify-content: space-between; gap: 4px; margin-bottom: 5px; break-inside: avoid; }
     .item-main { min-width: 0; word-break: break-word; }
-    .item-price { white-space: nowrap; font-weight: bold; }
-    .opt { font-size: 10px; padding-left: 6px; }
-    .total { font-size: 14px; font-weight: bold; display: flex; justify-content: space-between; border-top: 1px solid #000; padding-top: 3px; }
-    .info { font-size: 10px; margin-top: 6px; break-inside: avoid; }
-    .footer { text-align: center; font-size: 10px; margin-top: 8px; }
+    .item-price { white-space: nowrap; font-weight: 700; }
+    .opt { font-size: 11px; font-weight: 700; padding-left: 6px; }
+    .total { font-size: 16px; font-weight: 700; display: flex; justify-content: space-between; border-top: 2px solid #000; padding-top: 4px; }
+    .info { font-size: 11px; font-weight: 700; margin-top: 6px; break-inside: avoid; }
+    .footer { text-align: center; font-size: 11px; font-weight: 700; margin-top: 8px; }
   </style></head><body>
     <h1>Lo de Martina</h1>
     <div class="sub">Comanda #${order.id.slice(0, 8).toUpperCase()}<br>${formatDate(order.created_at)}</div>
