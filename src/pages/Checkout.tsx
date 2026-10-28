@@ -98,23 +98,21 @@ export default function Checkout() {
     const finalNotes = [notes, paymentInfo].filter(Boolean).join(' | ');
 
     try {
-      if (user) {
-        const { error } = await supabase
-          .from('orders')
-          .insert({
-            user_id: user.id,
-            user_name: name,
-            user_phone: phone,
-            items: toOrderItems(items) as unknown as Json,
-            subtotal: subtotal(),
-            delivery_fee: deliveryFee,
-            total,
-            payment_method: paymentMethod,
-            delivery_address: deliveryType === 'delivery' ? address : null,
-            notes: finalNotes,
-          });
-        if (error) throw error;
-      }
+      const { error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          user_id: user?.id ?? null,
+          user_name: name,
+          user_phone: phone,
+          items: toOrderItems(items) as unknown as Json,
+          subtotal: subtotal(),
+          delivery_fee: deliveryFee,
+          total,
+          payment_method: paymentMethod,
+          delivery_address: deliveryType === 'delivery' ? address : null,
+          notes: finalNotes,
+        });
+      if (orderError) throw orderError;
 
       const message = buildWhatsAppMessage(
         toOrderItems(items),
