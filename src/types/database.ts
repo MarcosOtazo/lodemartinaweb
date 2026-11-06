@@ -72,6 +72,7 @@ export interface Database {
           image_url?: string | null;
           is_active?: boolean;
           sort_order?: number;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -356,6 +357,12 @@ export interface Database {
         };
          Update: {
            user_id?: string | null;
+           user_name?: string;
+           user_phone?: string;
+           items?: Json;
+           subtotal?: number;
+           delivery_fee?: number;
+           total?: number;
            status?: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
            payment_method?: 'cash' | 'card' | 'transfer';
            delivery_address?: string | null;

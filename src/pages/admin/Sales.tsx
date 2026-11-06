@@ -19,7 +19,7 @@ import {
   printOrderTicket,
   cn,
 } from '../../lib/utils';
-import { Search, ChevronDown, ChevronUp, MessageCircle, Download, Printer, CheckSquare, Plus, Trash2, X } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, MessageCircle, Download, Printer, CheckSquare, Plus, Trash2, X, Pencil } from 'lucide-react';
 
 const ALL_STATUSES: (OrderStatus | 'all')[] = ['all', 'pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
 
@@ -36,7 +36,6 @@ export default function AdminSales() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [products, setProducts] = useState<Product[]>([]);
-  const { groups: productOptionGroups } = useProductOptions(products.map((p) => p.id));
   const [clients, setClients] = useState<User[]>([]);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualName, setManualName] = useState('');
@@ -44,7 +43,7 @@ export default function AdminSales() {
   const [manualClientId, setManualClientId] = useState('');
   const [manualDeliveryType, setManualDeliveryType] = useState<'pickup' | 'delivery'>('pickup');
   const [manualAddress, setManualAddress] = useState('');
-  const [manualPayment, setManualPayment] = useState<'cash' | 'transfer'>('cash');
+  const [manualPayment, setManualPayment] = useState<'cash' | 'transfer' | 'card'>('cash');
   const [manualNotes, setManualNotes] = useState('');
   const [manualCashAmount, setManualCashAmount] = useState('');
   const [manualDiscountType, setManualDiscountType] = useState<'amount' | 'percent'>('amount');
@@ -53,6 +52,39 @@ export default function AdminSales() {
     Array<OrderItem & { selected_options: SelectedOption[] }>
   >([]);
   const [manualSaving, setManualSaving] = useState(false);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [editOriginalUserId, setEditOriginalUserId] = useState<string | null>(null);
+  const [manualStatus, setManualStatus] = useState<OrderStatus>('confirmed');
+  const [manualDeliveryFeeInput, setManualDeliveryFeeInput] = useState('');
+
+  // En modo edición también se pueden elegir productos inactivos (que ya estaban en el pedido)
+  const selectableProducts: Product[] = (() => {
+    const map = new Map(products.map((p) => [p.id, p]));
+    if (editingOrderId) {
+      for (const it of manualItems) {
+        if (it.product_id && !map.has(it.product_id)) {
+          const basePrice =
+            Number(it.product_price || 0) -
+            (it.selected_options || []).reduce((s, o) => s + Number(o.price || 0), 0);
+          map.set(it.product_id, {
+            id: it.product_id,
+            name: it.product_name || 'Producto',
+            description: '',
+            price: basePrice > 0 ? basePrice : 0,
+            category: '',
+            image_url: null,
+            is_active: false,
+            sort_order: 0,
+            created_at: '',
+            updated_at: '',
+          });
+        }
+      }
+    }
+    return [...map.values()];
+  })();
+
+  const { groups: productOptionGroups } = useProductOptions(selectableProducts.map((p) => p.id));
 
   const loadOrders = async () => {
     const { data } = await supabase
@@ -172,10 +204,14 @@ export default function AdminSales() {
   };
 
   const openManualModal = () => {
+    setEditingOrderId(null);
+    setEditOriginalUserId(null);
+    setManualStatus('confirmed');
     setManualName('');
     setManualPhone('');
     setManualClientId('');
     setManualDeliveryType('pickup');
+    setManualDeliveryFeeInput('');
     setManualAddress('');
     setManualPayment('cash');
     setManualNotes('');
@@ -186,6 +222,68 @@ export default function AdminSales() {
       { product_id: '', product_name: '', product_price: 0, quantity: 1, selected_options: [] },
     ]);
     setManualOpen(true);
+  };
+
+  const parseMoney = (text: string): number => {
+    const digits = text.replace(/[^\d.,]/g, '');
+    if (!digits) return 0;
+    const normalized = digits.replace(/\./g, '').replace(',', '.');
+    const value = Number(normalized);
+    return Number.isFinite(value) ? value : 0;
+  };
+
+  const splitAutoNotes = (notes?: string) =>
+    (notes || '')
+      .split(' | ')
+      .map((part) => part.trim())
+      .filter(
+        (part) =>
+          part !== '' &&
+          !/^Paga con\b/i.test(part) &&
+          !/^Descuento:/i.test(part)
+      )
+      .join(' | ');
+
+  const openEditModal = (order: Order) => {
+    const orderItems = ((order.items as unknown as OrderItem[]) || []).map((it) => ({
+      ...it,
+      product_price: Number(it.product_price) || 0,
+      quantity: Number(it.quantity) || 1,
+      selected_options: it.selected_options || [],
+    }));
+    const notes = splitAutoNotes(order.notes);
+    const discountMatch = (order.notes || '').match(/Descuento:\s*[^()]*\(([\d.,]+)%\)/);
+    const cashMatch = (order.notes || '').match(/Paga con:\s*[^()]*/);
+
+    setEditingOrderId(order.id);
+    setEditOriginalUserId(order.user_id);
+    setManualStatus(order.status);
+    setManualName(order.user_name || '');
+    setManualPhone(order.user_phone === '—' ? '' : order.user_phone || '');
+    setManualClientId(order.user_id || '');
+    setManualDeliveryType(order.delivery_address ? 'delivery' : 'pickup');
+    setManualDeliveryFeeInput(String(Number(order.delivery_fee) || 0));
+    setManualAddress(order.delivery_address || '');
+    setManualPayment(order.payment_method === 'transfer' ? 'transfer' : order.payment_method === 'card' ? 'card' : 'cash');
+    setManualNotes(notes);
+    setManualCashAmount(cashMatch ? String(parseMoney(cashMatch[0])) : '');
+    setManualDiscountType('percent');
+    setManualDiscountValue(discountMatch ? discountMatch[1].replace(',', '.') : '');
+    setManualItems(
+      orderItems.length > 0
+        ? orderItems
+        : [{ product_id: '', product_name: '', product_price: 0, quantity: 1, selected_options: [] }]
+    );
+    setManualOpen(true);
+  };
+
+  const changeDeliveryType = (next: 'pickup' | 'delivery') => {
+    setManualDeliveryType(next);
+    if (next === 'pickup') {
+      setManualDeliveryFeeInput('0');
+    } else if (!manualDeliveryFeeInput || Number(manualDeliveryFeeInput) === 0) {
+      setManualDeliveryFeeInput(String(Number(config.delivery_fee) || 0));
+    }
   };
 
   const manualSubtotal = manualItems.reduce(
@@ -201,7 +299,12 @@ export default function AdminSales() {
   })();
   const manualDiscountPct =
     manualSubtotal > 0 ? (manualDiscountAmount / manualSubtotal) * 100 : 0;
-  const manualDeliveryFee = manualDeliveryType === 'delivery' ? Number(config.delivery_fee) || 0 : 0;
+  const manualDeliveryFee = (() => {
+    if (manualDeliveryType !== 'delivery') return 0;
+    const typed = Number(manualDeliveryFeeInput);
+    if (manualDeliveryFeeInput.trim() !== '' && Number.isFinite(typed) && typed >= 0) return typed;
+    return Number(config.delivery_fee) || 0;
+  })();
   const manualTotal = manualSubtotal - manualDiscountAmount + manualDeliveryFee;
   const manualCashNum = Number(manualCashAmount) || 0;
   const manualChange = manualCashNum - manualTotal;
@@ -239,42 +342,64 @@ export default function AdminSales() {
          }
        }
      }
-     if (manualPayment === 'cash' && (manualCashNum <= 0 || manualCashNum < manualTotal)) {
-      toast.error('Ingresá con cuánto paga el cliente');
-      return;
-    }
+     const cashProvided = manualCashAmount.trim() !== '';
+     if (
+       manualPayment === 'cash' &&
+       (cashProvided || !editingOrderId) &&
+       (manualCashNum <= 0 || manualCashNum < manualTotal)
+     ) {
+       toast.error(
+         editingOrderId
+           ? `Faltan ${formatPrice(manualTotal - manualCashNum)} para completar el total`
+           : 'Ingresá con cuánto paga el cliente'
+       );
+       return;
+     }
     setManualSaving(true);
     try {
-       const noteParts = [
-         manualNotes.trim(),
-         `Pedido cargado manualmente - ${manualDeliveryType === 'delivery' ? 'Envío a domicilio' : 'Retiro'}`,
-       ];
+       const noteParts = [manualNotes.trim()];
+      if (!editingOrderId) {
+        noteParts.push(
+          `Pedido cargado manualmente - ${manualDeliveryType === 'delivery' ? 'Envío a domicilio' : 'Retiro'}`
+        );
+      }
       if (manualDiscountAmount > 0) {
         noteParts.push(
           `Descuento: ${formatPrice(manualDiscountAmount)} (${manualDiscountPct.toFixed(1)}%)`
         );
       }
-      if (manualPayment === 'cash') {
+      if (manualPayment === 'cash' && cashProvided) {
         noteParts.push(
           `Paga con: ${formatPrice(manualCashNum)}${manualChange > 0 ? ` (vuelto: ${formatPrice(manualChange)})` : ''}`
         );
       }
-      const { error } = await supabase.from('orders').insert({
-         user_id: manualClientId || null,
-         user_name: manualName.trim(),
-         user_phone: manualPhone.trim() || '—',
-         items: validItems as unknown as Json,
-         subtotal: manualSubtotal,
-         delivery_fee: manualDeliveryFee,
-         total: manualTotal,
-         status: 'confirmed',
-         payment_method: manualPayment,
-         delivery_address: manualDeliveryType === 'delivery' ? manualAddress.trim() : null,
-         notes: noteParts.filter(Boolean).join(' | '),
-      });
-      if (error) throw error;
-      toast.success('Pedido cargado');
+      const payload = {
+        user_id: manualClientId || (editingOrderId ? editOriginalUserId : null) || null,
+        user_name: manualName.trim(),
+        user_phone: manualPhone.trim() || '—',
+        items: validItems as unknown as Json,
+        subtotal: manualSubtotal,
+        delivery_fee: manualDeliveryFee,
+        total: manualTotal,
+        payment_method: manualPayment,
+        delivery_address: manualDeliveryType === 'delivery' ? manualAddress.trim() : null,
+        notes: noteParts.filter(Boolean).join(' | '),
+      };
+
+      if (editingOrderId) {
+        const { error } = await supabase
+          .from('orders')
+          .update({ ...payload, status: manualStatus, updated_at: new Date().toISOString() })
+          .eq('id', editingOrderId);
+        if (error) throw error;
+        toast.success('Pedido actualizado');
+      } else {
+        const { error } = await supabase.from('orders').insert({ ...payload, status: 'confirmed' });
+        if (error) throw error;
+        toast.success('Pedido cargado');
+      }
       setManualOpen(false);
+      setEditingOrderId(null);
       loadOrders();
     } catch (error) {
       console.error(error);
@@ -459,6 +584,13 @@ export default function AdminSales() {
                       <Printer className="h-4 w-4" />
                     </button>
                     <button
+                      onClick={() => openEditModal(order)}
+                      className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-primary"
+                      title="Editar pedido"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
                       onClick={() => deleteOrder(order)}
                       className="p-2 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-600"
                       title="Eliminar pedido"
@@ -586,8 +718,14 @@ export default function AdminSales() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
               <div>
-                <h2 className="text-xl font-bold">Pedido en local</h2>
-                <p className="text-sm text-gray-500">Venta directa en el mostrador</p>
+                <h2 className="text-xl font-bold">
+                  {editingOrderId ? 'Editar pedido' : 'Pedido en local'}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {editingOrderId
+                    ? `#${editingOrderId.slice(0, 8).toUpperCase()}`
+                    : 'Venta directa en el mostrador'}
+                </p>
               </div>
               <button onClick={() => setManualOpen(false)} className="p-2 rounded-full hover:bg-gray-100">
                 <X className="h-5 w-5" />
@@ -638,7 +776,7 @@ export default function AdminSales() {
                  <div className="grid grid-cols-2 gap-3">
                    <button
                      type="button"
-                     onClick={() => setManualDeliveryType('pickup')}
+                     onClick={() => changeDeliveryType('pickup')}
                      className={cn(
                        'p-3 rounded-xl border-2 text-center',
                        manualDeliveryType === 'pickup'
@@ -650,7 +788,7 @@ export default function AdminSales() {
                    </button>
                    <button
                      type="button"
-                     onClick={() => setManualDeliveryType('delivery')}
+                     onClick={() => changeDeliveryType('delivery')}
                      className={cn(
                        'p-3 rounded-xl border-2 text-center',
                        manualDeliveryType === 'delivery'
@@ -671,6 +809,19 @@ export default function AdminSales() {
                          value={manualAddress}
                          onChange={(e) => setManualAddress(e.target.value)}
                          placeholder="Calle, número, piso, referencias..."
+                       />
+                     </div>
+                     <div>
+                       <label className="label" htmlFor="manualFee">Valor del envío ($)</label>
+                       <input
+                         id="manualFee"
+                         type="number"
+                         min="0"
+                         step="0.01"
+                         className="input"
+                         value={manualDeliveryFeeInput}
+                         onChange={(e) => setManualDeliveryFeeInput(e.target.value)}
+                         placeholder={`Predeterminado: ${formatPrice(Number(config.delivery_fee) || 0)}`}
                        />
                      </div>
                      <p className="text-xs text-gray-500">
@@ -713,7 +864,7 @@ export default function AdminSales() {
                             className="input flex-1 min-w-[150px]"
                             value={item.product_id}
                             onChange={(e) => {
-                              const prod = products.find((p) => p.id === e.target.value);
+                              const prod = selectableProducts.find((p) => p.id === e.target.value);
                               const next = [...manualItems];
                               next[ii] = {
                                 ...item,
@@ -726,7 +877,7 @@ export default function AdminSales() {
                             }}
                           >
                             <option value="">Elegí un producto...</option>
-                            {products.map((p) => (
+                            {selectableProducts.map((p) => (
                               <option key={p.id} value={p.id}>
                                 {p.name} ({formatPrice(p.price)})
                               </option>
@@ -814,7 +965,7 @@ export default function AdminSales() {
                                             (sum, selected) => sum + Number(selected.price || 0),
                                             0
                                           );
-                                          const baseProduct = products.find(
+                                          const baseProduct = selectableProducts.find(
                                             (product) => product.id === item.product_id
                                           );
                                           const next = [...manualItems];
@@ -864,10 +1015,11 @@ export default function AdminSales() {
                   <select
                     className="input"
                     value={manualPayment}
-                    onChange={(e) => setManualPayment(e.target.value as 'cash' | 'transfer')}
+                    onChange={(e) => setManualPayment(e.target.value as 'cash' | 'transfer' | 'card')}
                   >
                     <option value="cash">Efectivo</option>
                     <option value="transfer">Transferencia</option>
+                    <option value="card">Tarjeta</option>
                   </select>
                 </div>
                 {manualPayment === 'cash' && (
@@ -972,12 +1124,34 @@ export default function AdminSales() {
                 />
               </div>
 
+              {editingOrderId && (
+                <div>
+                  <label className="label">Estado del pedido</label>
+                  <select
+                    className="input"
+                    value={manualStatus}
+                    onChange={(e) => setManualStatus(e.target.value as OrderStatus)}
+                  >
+                    <option value="pending">Pendiente</option>
+                    <option value="confirmed">Confirmado</option>
+                    <option value="preparing">En preparación</option>
+                    <option value="ready">Listo</option>
+                    <option value="delivered">Entregado</option>
+                    <option value="cancelled">Cancelado</option>
+                  </select>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setManualOpen(false)} className="btn-secondary flex-1">
                   Cancelar
                 </button>
                 <button type="button" onClick={saveManualOrder} className="btn-primary flex-1" disabled={manualSaving}>
-                  {manualSaving ? 'Guardando...' : 'Cargar pedido'}
+                  {manualSaving
+                    ? 'Guardando...'
+                    : editingOrderId
+                      ? 'Guardar cambios'
+                      : 'Cargar pedido'}
                 </button>
               </div>
             </div>

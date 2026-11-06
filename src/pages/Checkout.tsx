@@ -78,6 +78,27 @@ export default function Checkout() {
       );
       return;
     }
+    const cartProductIds = items.map((it) => it.product_id);
+    const { data: availableRows, error: availError } = await supabase
+      .from('products')
+      .select('id')
+      .in('id', cartProductIds)
+      .eq('is_active', true);
+    if (!availError) {
+      const availableIds = new Set((availableRows || []).map((row) => row.id));
+      const unavailableNames = [
+        ...new Set(
+          items.filter((it) => !availableIds.has(it.product_id)).map((it) => it.product_name)
+        ),
+      ];
+      if (unavailableNames.length > 0) {
+        toast.error(
+          `Ya no están disponibles: ${unavailableNames.join(', ')}. Quitálos del carrito para continuar.`
+        );
+        return;
+      }
+    }
+
     const whatsappNumber = config.whatsapp_number || import.meta.env.VITE_WHATSAPP_NUMBER;
     if (!whatsappNumber) {
       toast.error('No hay número de WhatsApp configurado. Contactanos por otro medio.');

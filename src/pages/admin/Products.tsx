@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useConfigStore } from '../../store/config';
 import type { Category, Insumo, Product, ProductCategory, Receta } from '../../types';
 import { formatPrice, cn, compatibleUnits, toBaseQuantity, fromBaseQuantity, unitCostOf, validateImageFile } from '../../lib/utils';
-import { Plus, Pencil, Trash2, X, Search, Tags, ChefHat, Wallet, Copy, Package } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, Tags, ChefHat, Wallet, Copy, Package, Eye, EyeOff } from 'lucide-react';
 
 type OptionItemDraft = {
   id?: string;
@@ -1033,6 +1033,24 @@ export default function AdminProducts() {
     }
   };
 
+  const toggleProductActive = async (product: Product) => {
+    const next = !product.is_active;
+    const { error } = await supabase
+      .from('products')
+      .update({ is_active: next, updated_at: new Date().toISOString() })
+      .eq('id', product.id);
+    if (error) {
+      toast.error('Error al cambiar la visibilidad del producto');
+      return;
+    }
+    setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, is_active: next } : p)));
+    toast.success(
+      next
+        ? `"${product.name}" ya se ve en la web`
+        : `"${product.name}" dejó de verse en la web`
+    );
+  };
+
   const updateCategory = async (cat: Category, updates: CategoryUpdate): Promise<boolean> => {
     const { error } = await supabase.from('categories').update(updates).eq('id', cat.id);
     if (error) {
@@ -1497,6 +1515,23 @@ export default function AdminProducts() {
                       })()}
                   </div>
                   <div className="flex gap-1 items-center">
+                    <button
+                      onClick={() => toggleProductActive(product)}
+                      className={cn(
+                        'p-2 rounded-lg hover:bg-gray-100',
+                        product.is_active
+                        ? 'text-green-600 hover:text-green-700'
+                        : 'text-red-500 hover:text-red-600'
+                      )}
+                      aria-label={product.is_active ? 'Ocultar de la web' : 'Mostrar en la web'}
+                      title={
+                        product.is_active
+                        ? 'Visible en la web (clic para ocultar)'
+                        : 'Oculto en la web (clic para mostrar)'
+                      }
+                      >
+                      {product.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                    </button>
                     <button
                       onClick={() => duplicateProduct(product)}
                       className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-primary"
