@@ -354,6 +354,7 @@ export interface Database {
           payment_method?: 'cash' | 'card' | 'transfer';
           delivery_address?: string | null;
           notes?: string | null;
+          created_at?: string;
         };
          Update: {
            user_id?: string | null;
@@ -367,6 +368,7 @@ export interface Database {
            payment_method?: 'cash' | 'card' | 'transfer';
            delivery_address?: string | null;
            notes?: string | null;
+           created_at?: string;
            updated_at?: string;
          };
         Relationships: [];

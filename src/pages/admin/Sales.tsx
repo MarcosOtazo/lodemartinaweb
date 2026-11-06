@@ -56,6 +56,7 @@ export default function AdminSales() {
   const [editOriginalUserId, setEditOriginalUserId] = useState<string | null>(null);
   const [manualStatus, setManualStatus] = useState<OrderStatus>('confirmed');
   const [manualDeliveryFeeInput, setManualDeliveryFeeInput] = useState('');
+  const [manualCreatedAt, setManualCreatedAt] = useState('');
 
   // En modo edición también se pueden elegir productos inactivos (que ya estaban en el pedido)
   const selectableProducts: Product[] = (() => {
@@ -105,7 +106,6 @@ export default function AdminSales() {
     supabase
       .from('products')
       .select('*')
-      .eq('is_active', true)
       .order('name')
       .then(({ data }) => setProducts((data || []) as Product[]));
 
@@ -207,6 +207,7 @@ export default function AdminSales() {
     setEditingOrderId(null);
     setEditOriginalUserId(null);
     setManualStatus('confirmed');
+    setManualCreatedAt(toLocalInput(new Date().toISOString()));
     setManualName('');
     setManualPhone('');
     setManualClientId('');
@@ -230,6 +231,19 @@ export default function AdminSales() {
     const normalized = digits.replace(/\./g, '').replace(',', '.');
     const value = Number(normalized);
     return Number.isFinite(value) ? value : 0;
+  };
+
+  const toLocalInput = (iso: string): string => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const fromLocalInput = (value: string): string | null => {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
   };
 
   const splitAutoNotes = (notes?: string) =>
@@ -258,6 +272,7 @@ export default function AdminSales() {
     setEditingOrderId(order.id);
     setEditOriginalUserId(order.user_id);
     setManualStatus(order.status);
+    setManualCreatedAt(toLocalInput(order.created_at));
     setManualName(order.user_name || '');
     setManualPhone(order.user_phone === '—' ? '' : order.user_phone || '');
     setManualClientId(order.user_id || '');
@@ -355,6 +370,10 @@ export default function AdminSales() {
        );
        return;
      }
+     if (!fromLocalInput(manualCreatedAt)) {
+       toast.error('Revisá la fecha y hora del pedido');
+       return;
+     }
     setManualSaving(true);
     try {
        const noteParts = [manualNotes.trim()];
@@ -384,6 +403,7 @@ export default function AdminSales() {
         payment_method: manualPayment,
         delivery_address: manualDeliveryType === 'delivery' ? manualAddress.trim() : null,
         notes: noteParts.filter(Boolean).join(' | '),
+        created_at: fromLocalInput(manualCreatedAt) || new Date().toISOString(),
       };
 
       if (editingOrderId) {
@@ -879,7 +899,8 @@ export default function AdminSales() {
                             <option value="">Elegí un producto...</option>
                             {selectableProducts.map((p) => (
                               <option key={p.id} value={p.id}>
-                                {p.name} ({formatPrice(p.price)})
+                                {p.name}
+                                {p.is_active ? '' : ' (oculto en la web)'} ({formatPrice(p.price)})
                               </option>
                             ))}
                           </select>
@@ -1124,23 +1145,38 @@ export default function AdminSales() {
                 />
               </div>
 
-              {editingOrderId && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="label">Estado del pedido</label>
-                  <select
+                  <label className="label" htmlFor="manualCreatedAt">Fecha y hora del pedido</label>
+                  <input
+                    id="manualCreatedAt"
+                    type="datetime-local"
                     className="input"
-                    value={manualStatus}
-                    onChange={(e) => setManualStatus(e.target.value as OrderStatus)}
-                  >
-                    <option value="pending">Pendiente</option>
-                    <option value="confirmed">Confirmado</option>
-                    <option value="preparing">En preparación</option>
-                    <option value="ready">Listo</option>
-                    <option value="delivered">Entregado</option>
-                    <option value="cancelled">Cancelado</option>
-                  </select>
+                    value={manualCreatedAt}
+                    onChange={(e) => setManualCreatedAt(e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Si lo cargaste pasada la medianoche, corregilo acá para que cuente en el día correcto.
+                  </p>
                 </div>
-              )}
+                {editingOrderId && (
+                  <div>
+                    <label className="label">Estado del pedido</label>
+                    <select
+                      className="input"
+                      value={manualStatus}
+                      onChange={(e) => setManualStatus(e.target.value as OrderStatus)}
+                    >
+                      <option value="pending">Pendiente</option>
+                      <option value="confirmed">Confirmado</option>
+                      <option value="preparing">En preparación</option>
+                      <option value="ready">Listo</option>
+                      <option value="delivered">Entregado</option>
+                      <option value="cancelled">Cancelado</option>
+                    </select>
+                  </div>
+                )}
+              </div>
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setManualOpen(false)} className="btn-secondary flex-1">
