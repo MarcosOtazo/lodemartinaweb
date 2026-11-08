@@ -97,11 +97,15 @@ export default function ProductModal({
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Imagen */}
-        <div className="relative h-52 shrink-0 bg-gray-100">
+        <div className="relative shrink-0 bg-gray-100 flex justify-center overflow-hidden">
           {product.image_url ? (
-            <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
+            <img
+              src={product.image_url}
+              alt={product.name}
+              className="w-full max-h-[45vh] object-contain"
+            />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-primary-light">
+            <div className="flex h-52 w-full items-center justify-center bg-primary-light">
               {config.logo_url ? (
                 <img src={config.logo_url} alt={config.site_name} className="h-32 w-32 rounded-full object-cover" />
               ) : (
